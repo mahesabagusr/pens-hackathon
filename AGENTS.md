@@ -23,6 +23,7 @@ Next.js 16 App Router app on a synthetic KasirNusa dataset: a static landing pag
 | Production build | `npm run build` |
 | New migration | `npx prisma migrate dev --name <change>` |
 | Load the dataset | `npm run db:load`, then `npm run graph:load` |
+| Discovery acceptance tests (PRD §13) | `npx tsx scripts/check-discovery.mts` |
 
 Run lint, typecheck and build before calling a change done.
 

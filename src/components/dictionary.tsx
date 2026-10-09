@@ -5,18 +5,18 @@ import type { Entry } from "~/server/landing";
 import { AskButton } from "./chat";
 
 const KINDS = [
-  { value: "", label: "All" },
-  { value: "diskon", label: "Discounts" },
-  { value: "pengecualian", label: "Exceptions" },
-  { value: "janji_fitur", label: "Feature promises" },
-  { value: "eskalasi", label: "Escalations" },
+  { value: "", label: "Semua" },
+  { value: "diskon", label: "Diskon" },
+  { value: "pengecualian", label: "Pengecualian" },
+  { value: "janji_fitur", label: "Janji fitur" },
+  { value: "eskalasi", label: "Eskalasi" },
 ];
-const NOUN: Record<string, string> = { diskon: "discount", pengecualian: "exception", janji_fitur: "feature promise", eskalasi: "escalation" };
+const NOUN: Record<string, string> = { diskon: "diskon", pengecualian: "pengecualian", janji_fitur: "janji fitur", eskalasi: "eskalasi" };
 const DOT: Record<string, string> = { Disetujui: "bg-ok", Ditolak: "bg-danger", Menunggu: "bg-warn" };
 const PREVIEW = 8;
 
 const when = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 export function Dictionary({ entries }: { entries: Entry[] }) {
   const [kind, setKind] = useState("");
@@ -26,15 +26,15 @@ export function Dictionary({ entries }: { entries: Entry[] }) {
 
   return (
     <div>
-      <div role="group" aria-label="Filter by decision type" className="flex flex-wrap gap-2">
+      <div role="group" aria-label="Saring menurut jenis keputusan" className="flex flex-wrap gap-2">
         {KINDS.map((k) => (
           <button
             key={k.value}
             type="button"
             aria-pressed={kind === k.value}
             onClick={() => setKind(k.value)}
-            className={`min-h-11 rounded-[10px] border px-4 text-sm ${
-              kind === k.value ? "border-accent bg-accent font-medium text-black" : "border-line bg-white hover:border-ink"
+            className={`min-h-11 cursor-pointer rounded-md border px-4 text-sm transition-colors duration-150 ${
+              kind === k.value ? "border-accent bg-accent font-medium text-black" : "border-line text-muted hover:border-white/50 hover:text-ink"
             }`}
           >
             {k.label}
@@ -56,19 +56,19 @@ export function Dictionary({ entries }: { entries: Entry[] }) {
               </p>
             </div>
             <p className="mt-2 max-w-prose">{e.alasan}</p>
-            {e.statusJanji && <p className="mt-1 text-sm">Promise status: {e.statusJanji}</p>}
+            {e.statusJanji && <p className="mt-1 text-sm">Status janji: {e.statusJanji}</p>}
             <p className="mt-2 text-sm text-muted">
-              {e.id} · {when(e.tanggal)} · {e.akun} · asked by {e.diminta} · decided by {e.diputuskan}
+              {e.id} · {when(e.tanggal)} · {e.akun} · diminta {e.diminta} · diputuskan {e.diputuskan}
             </p>
             <AskButton
-              question={`Tell me about decision ${e.id}: who was involved, why it was made, and what happened next.`}
-              className="mt-2 min-h-11 text-sm underline underline-offset-4 hover:no-underline"
+              question={`Ceritakan keputusan ${e.id}: siapa yang terlibat, kenapa diambil, dan apa yang terjadi sesudahnya.`}
+              className="mt-2 min-h-11 cursor-pointer text-sm text-accent underline-offset-4 hover:underline"
             >
-              Ask the graph about {e.id}
+              Tanya chat tentang {e.id}
             </AskButton>
           </li>
         ))}
-        {visible.length === 0 && <li className="py-5 text-muted">No decisions of this type in the log.</li>}
+        {visible.length === 0 && <li className="py-5 text-muted">Tidak ada keputusan jenis ini di log.</li>}
       </ol>
 
       {shown.length > PREVIEW && (
@@ -76,9 +76,9 @@ export function Dictionary({ entries }: { entries: Entry[] }) {
           type="button"
           aria-expanded={all}
           onClick={() => setAll(!all)}
-          className="mt-4 min-h-11 rounded-[10px] border border-line bg-white px-4 text-sm hover:border-ink"
+          className="mt-4 min-h-11 cursor-pointer rounded-md border border-line px-4 text-sm transition-colors duration-150 hover:border-white/50"
         >
-          {all ? "Show fewer" : `Show all ${shown.length}`}
+          {all ? "Tampilkan lebih sedikit" : `Tampilkan semua ${shown.length}`}
         </button>
       )}
     </div>

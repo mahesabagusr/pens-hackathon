@@ -32,7 +32,7 @@ export async function register(_: AuthState, data: FormData): Promise<AuthState>
   }
   const user = await db.user.create({ data: { name, email: address, passwordHash: await hashPassword(plain) } });
   await startSession(user.id);
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function login(_: AuthState, data: FormData): Promise<AuthState> {
@@ -51,7 +51,7 @@ export async function login(_: AuthState, data: FormData): Promise<AuthState> {
     return { values, errors: { form: "Email or password is incorrect." } };
   }
   await startSession(user.id);
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function logout() {

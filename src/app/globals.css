@@ -46,3 +46,25 @@ html {
     scroll-behavior: smooth;
   }
 }
+
+/* React Flow on the dashboard tokens. Its stylesheet is imported by evidence-graph.tsx; .dark matches its own dark-mode selector. */
+.react-flow.dark {
+  --xy-background-color: transparent;
+  --xy-controls-button-background-color: #131316;
+  --xy-controls-button-background-color-hover: #1d1d21;
+  --xy-controls-button-color: #ffffff;
+  --xy-controls-button-color-hover: #ffffff;
+  --xy-controls-button-border-color: #ffffff24;
+  --xy-controls-box-shadow: 0 0 0 1px #ffffff24;
+  --xy-minimap-background-color: #131316;
+  --xy-attribution-background-color: transparent;
+}
+.react-flow__controls-button {
+  width: 32px;
+  height: 32px;
+}
+.react-flow__node:focus-visible,
+.react-flow__edge:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}

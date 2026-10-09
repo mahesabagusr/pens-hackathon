@@ -14,6 +14,8 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 COPY --from=builder /app/public ./public
+# The dashboard reads the dataset from data/ at runtime.
+COPY --from=builder /app/data ./data
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 USER node

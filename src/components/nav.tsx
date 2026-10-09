@@ -28,6 +28,9 @@ function AuthLinks({ user, onNavigate, stacked }: { user?: NavUser | null; onNav
   if (user) {
     return (
       <div className={row}>
+        <Link href="/dashboard" onClick={onNavigate} className={solid}>
+          Dashboard
+        </Link>
         <span className={`${stacked ? "px-1 py-2" : "max-w-40 truncate px-3"} text-sm text-muted`} title={user.email}>
           {user.name ?? user.email}
         </span>

@@ -4,12 +4,16 @@ import {
   type FunctionDeclaration,
   type Part,
 } from "@google/genai";
-import neo4j from "neo4j-driver";
+import neo4j, { type Record as NeoRecord } from "neo4j-driver";
 import { z } from "zod";
+import { currentUser } from "~/server/auth";
+import { buildVisual, citesIn, type Visual } from "~/server/chat-visuals";
+import { dataset } from "~/server/dataset";
 import { graph } from "~/server/graph";
 
 const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
-const MAX_STEPS = 4;
+const MAX_STEPS = 5; // three query rounds, one `show` round, one answer
+const MAX_VISUALS = 2;
 const MAX_RESULT_CHARS = 12_000;
 
 const SYSTEM = `You answer questions about who made which decision, and why, at PT KasirNusa Teknologi (a point-of-sale software company). All people, companies and figures are synthetic.
@@ -36,7 +40,8 @@ Rules:
 - The data is deliberately untidy. CRM fields can be stale (a champion may have left the account), and emails in Interaksi can use an old address. Cross-check sources before you conclude.
 - Always add LIMIT. Each query is a costly round trip: answer in at most 3 query rounds, and fetch related facts together in one query (use OPTIONAL MATCH and collect()).
 - Answer in the language the user wrote in. Plain text, no markdown, short lines. Cite ids (for example D-2025-11, I0061, C01) so each claim can be traced.
-- If the graph does not hold the answer, say so. Do not guess or invent names, numbers or reasons.`;
+- If the graph does not hold the answer, say so. Do not guess or invent names, numbers or reasons.
+- Each cypher result carries a query number. When a result is better seen than read (more than 5 rows, counts per group, a trend over time, a set of connected entities), call the show tool once with that number before you answer. For a graph, return nodes, relationships or paths from the query, not only properties. For bar or line charts, x and y must be returned column names and y must be numeric.`;
 
 const CYPHER_TOOL: FunctionDeclaration = {
   name: "cypher",
@@ -54,6 +59,31 @@ const CYPHER_TOOL: FunctionDeclaration = {
   },
 };
 
+const SHOW_TOOL: FunctionDeclaration = {
+  name: "show",
+  description:
+    "Draw the rows of an earlier cypher result for the user as a graph, table, bar chart or line chart. The server draws from the real rows; you only choose how.",
+  parametersJsonSchema: {
+    type: "object",
+    properties: {
+      query: { type: "integer", description: "The query number of a successful cypher result" },
+      kind: { type: "string", enum: ["graph", "table", "bar", "line"] },
+      title: { type: "string", description: "Short title in the user's language" },
+      x: { type: "string", description: "bar/line only: column for categories or dates" },
+      y: { type: "string", description: "bar/line only: numeric column" },
+    },
+    required: ["query", "kind", "title"],
+  },
+};
+
+const Show = z.object({
+  query: z.coerce.number().int().min(0),
+  kind: z.enum(["graph", "table", "bar", "line"]),
+  title: z.string().max(200),
+  x: z.string().max(100).optional(),
+  y: z.string().max(100).optional(),
+});
+
 const Body = z.object({
   messages: z
     .array(
@@ -64,6 +94,14 @@ const Body = z.object({
     )
     .min(1)
     .max(20),
+  // What the user is looking at in the dashboard. Re-checked against the dataset below.
+  context: z
+    .object({
+      accountId: z.string().regex(/^[A-Z]\d{2}$/).optional(),
+      asOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      selectedNodeId: z.string().max(40).optional(),
+    })
+    .optional(),
 });
 
 // Plain JSON for Neo4j values: nodes and relationships lose their driver wrappers.
@@ -97,7 +135,7 @@ async function runCypher(query: string) {
     if (summary.queryType !== "r")
       throw new Error("Only read-only queries are allowed.");
     const rows = result.records.slice(0, 50).map((r) => plain(r.toObject()));
-    return { rows, total: result.records.length };
+    return { rows, total: result.records.length, records: result.records.slice(0, 500) };
   } finally {
     await tx.rollback();
     await session.close();
@@ -127,6 +165,9 @@ async function withRetry<T>(call: () => Promise<T>): Promise<T> {
 }
 
 export async function POST(req: Request) {
+  if (!(await currentUser().catch(() => null)))
+    return Response.json({ error: "Your session ended. Log in again." }, { status: 401 });
+
   if (!process.env.GEMINI_API_KEY)
     return Response.json(
       {
@@ -148,12 +189,25 @@ export async function POST(req: Request) {
   if (!body.success)
     return Response.json({ error: "Invalid request." }, { status: 400 });
 
+  let system = SYSTEM;
+  const ctx = body.data.context;
+  if (ctx?.accountId) {
+    const account = dataset().accounts.find((a) => a.account_id === ctx.accountId);
+    if (!account) return Response.json({ error: "Unknown account." }, { status: 400 });
+    const selected = ctx.selectedNodeId ? citesIn(ctx.selectedNodeId)[0] : undefined;
+    system += `\n\nThe user is viewing account ${account.account_id} (${account.nama}) as of ${ctx.asOf ?? "2026-10-01"}.${
+      selected ? ` They selected ${selected.id} (${selected.label}) in the evidence graph.` : ""
+    } Resolve "this account", "dia", "di sini" and similar references with it.`;
+  }
+
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   const contents: Content[] = body.data.messages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
     parts: [{ text: m.content }],
   }));
   const queries: { cypher: string; rows: number; error?: string }[] = [];
+  const results: (NeoRecord[] | null)[] = []; // by query number, null when the query failed
+  const visuals: Visual[] = [];
   const started = Date.now();
 
   try {
@@ -163,9 +217,9 @@ export async function POST(req: Request) {
           model: MODEL,
           contents,
           config: {
-            systemInstruction: SYSTEM,
+            systemInstruction: system,
             maxOutputTokens: 4000,
-            tools: [{ functionDeclarations: [CYPHER_TOOL] }],
+            tools: [{ functionDeclarations: [CYPHER_TOOL, SHOW_TOOL] }],
           },
         }),
       );
@@ -183,31 +237,56 @@ export async function POST(req: Request) {
           answer,
           queries,
           seconds: Math.round((Date.now() - started) / 1000),
+          visuals,
+          cites: citesIn(answer),
         });
       }
 
       // Echo the model turn back as is: it carries thought signatures Gemini needs on the next call.
       if (reply) contents.push(reply);
-      const results: Part[] = [];
+      const parts: Part[] = [];
       for (const call of calls) {
-        const cypher = String(call.args?.query ?? "");
         let response: Record<string, unknown>;
-        try {
-          const { rows, total } = await runCypher(cypher);
-          queries.push({ cypher, rows: total });
-          response = {
-            output: JSON.stringify(rows).slice(0, MAX_RESULT_CHARS),
-          };
-        } catch (e) {
-          const error = e instanceof Error ? e.message : "Query failed";
-          queries.push({ cypher, rows: 0, error });
-          response = { error };
+        if (call.name === "show") {
+          const spec = Show.safeParse(call.args);
+          const records = spec.success ? results[spec.data.query] : null;
+          const built = !spec.success
+            ? "invalid arguments"
+            : !records
+              ? `query ${spec.data.query} did not succeed`
+              : visuals.length >= MAX_VISUALS
+                ? `at most ${MAX_VISUALS} visuals per answer`
+                : buildVisual(records, spec.data);
+          if (typeof built === "string") {
+            queries.push({ cypher: `show ${spec.data?.kind ?? "?"} from query ${spec.data?.query ?? "?"}`, rows: 0, error: `visual skipped: ${built}` });
+            response = { error: built };
+          } else {
+            visuals.push(built);
+            response = { output: "Shown to the user." };
+          }
+        } else {
+          const cypher = String(call.args?.query ?? "");
+          const query = results.length;
+          try {
+            const { rows, total, records } = await runCypher(cypher);
+            queries.push({ cypher, rows: total });
+            results.push(records);
+            response = {
+              query,
+              output: JSON.stringify(rows).slice(0, MAX_RESULT_CHARS),
+            };
+          } catch (e) {
+            const error = e instanceof Error ? e.message : "Query failed";
+            queries.push({ cypher, rows: 0, error });
+            results.push(null);
+            response = { query, error };
+          }
         }
-        results.push({
+        parts.push({
           functionResponse: { id: call.id, name: call.name, response },
         });
       }
-      contents.push({ role: "user", parts: results });
+      contents.push({ role: "user", parts });
     }
     return Response.json(
       { error: "The question needed too many queries. Try a narrower one." },
