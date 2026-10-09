@@ -6,7 +6,8 @@ import { dataset, type Row } from "./dataset";
 
 export const SNAPSHOT = "2026-10-01";
 
-export type Origin = "record" | "join" | "text_claim" | "cross_source_match";
+// "graph" marks relationships added by exploring Neo4j from Jalur bukti: real links, but with no file:row behind them.
+export type Origin = "record" | "join" | "text_claim" | "cross_source_match" | "graph";
 export type Status = "teridentifikasi_langsung" | "teridentifikasi_lintas_sumber" | "kandidat" | "belum_teridentifikasi";
 export type Role = "decision_maker" | "approver" | "evaluator" | "champion" | "discovery_contact" | "candidate" | "senior";
 
@@ -27,8 +28,26 @@ export type Step = { text: string; evidence: string[] };
 export type Precedent = { id: string; date: string; kind: string; account: string; value: string; decision: string; reason: string; promise: string | null; link: string; evidence: string[] };
 // "other" covers graph labels that discovery never produces itself (Tiket, Kontrak, ...), for graphs drawn from chat answers.
 export type NodeKind = "account" | "person" | "deal" | "employee" | "interaction" | "decision" | "feature" | "other";
-export type GraphNode = { id: string; label: string; kind: NodeKind; focus?: boolean };
-export type GraphEdge = { from: string; to: string; type: string; origin: Origin; evidence: string[] };
+export type GraphNode = {
+  id: string;
+  label: string;
+  kind: NodeKind;
+  focus?: boolean;
+  // Set only on nodes added by exploring Neo4j (src/server/neighbors.ts).
+  type?: string; // Neo4j label, e.g. "Tiket"
+  explored?: boolean;
+  props?: Record<string, string>;
+  cite?: { file: string; row: number };
+};
+export type GraphEdge = {
+  from: string;
+  to: string;
+  type: string;
+  origin: Origin;
+  evidence: string[];
+  props?: Record<string, string>; // relationship properties, explored edges only
+  count?: number; // explored edges: parallel relationships collapsed into this one (MEMAKAI per month)
+};
 
 export type Discovery = {
   account: { id: string; name: string; type: string; industry: string; city: string; outlets: string };

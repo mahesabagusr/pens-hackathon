@@ -12,7 +12,8 @@ export type VisualSpec = { kind: Visual["kind"]; title: string; x?: string; y?: 
 
 export type Cite = { id: string; kind: NodeKind; label: string; file: string; row: number; fields: Record<string, string> };
 
-const KIND: Record<string, NodeKind> = {
+// Neo4j label → node kind. Labels missing here (Tiket, Outlet, ...) draw as "other".
+export const LABEL_KIND: Record<string, NodeKind> = {
   Akun: "account",
   Kontak: "person",
   Deal: "deal",
@@ -48,7 +49,7 @@ function graphOf(records: NeoRecord[], title: string): Visual | string {
         nodes.set(v.elementId, {
           id: String(p.id ?? v.elementId),
           label: String(p.nama ?? p.subjek ?? p.judul ?? p.id ?? v.labels[0]),
-          kind: KIND[v.labels[0]] ?? "other",
+          kind: LABEL_KIND[v.labels[0]] ?? "other",
         });
     } else if (neo4j.isRelationship(v)) rels.push(v);
     else if (neo4j.isPath(v)) v.segments.forEach((s) => [s.start, s.relationship, s.end].forEach(walk));
@@ -86,8 +87,10 @@ export function buildVisual(records: NeoRecord[], spec: VisualSpec): Visual | st
   return { kind: spec.kind, title, x, y, points: (points as { x: string; y: number }[]).slice(0, spec.kind === "bar" ? 24 : 60) };
 }
 
-// ID formats in data/: C01/P01 accounts, K001 contacts, E01 employees, DL-001 deals, D-2025-11 decisions, FEAT-07 features, I0343 interactions.
-const ID = /\b(?:D-\d{4}-\d{2}|DL-\d{3}|FEAT-\d{2}|I\d{4}|K\d{3}|E\d{2}|[CP]\d{2})\b/g;
+// ID formats in data/: C01/P01 accounts, K001 contacts, E01 employees, DL-001 deals, D-2025-11 decisions, FEAT-07 features,
+// I0343 interactions, T0001 tickets, C01-O01 outlets, K-C01 contracts, BUG-398 bugs.
+// Outlets and contracts come first so C01-O01 and K-C01 are not cut short at C01.
+const ID = /\b(?:[CP]\d{2}-O\d{2}|K-[CP]\d{2}|BUG-\d{3,4}|D-\d{4}-\d{2}|DL-\d{3}|FEAT-\d{2}|I\d{4}|T\d{4}|K\d{3}|E\d{2}|[CP]\d{2})\b/g;
 const SOURCES = [
   ["accounts", "account_id", "crm_accounts.csv", "account", "nama"],
   ["contacts", "contact_id", "crm_contacts.csv", "person", "nama"],
@@ -96,6 +99,10 @@ const SOURCES = [
   ["decisions", "decision_id", "decision_log.csv", "decision", "decision_id"],
   ["features", "feature_id", "features.csv", "feature", "nama"],
   ["interactions", "interaction_id", "interactions.jsonl", "interaction", "subjek"],
+  ["tickets", "ticket_id", "support_tickets.csv", "other", "judul"],
+  ["outlets", "outlet_id", "outlets.csv", "other", "outlet_id"],
+  ["contracts", "contract_id", "contracts_billing.csv", "other", "contract_id"],
+  ["bugs", "bug_id", "bugs.csv", "other", "judul"],
 ] as const;
 
 // Only IDs that exist in the dataset become citations, so a look-alike string in prose stays plain text.

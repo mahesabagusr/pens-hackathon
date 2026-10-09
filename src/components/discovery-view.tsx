@@ -94,6 +94,7 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
               focusEvidence={[...d.decisionMaker.evidence, ...(d.approver?.evidence ?? [])]}
               focus={focus}
               account={d.account.name}
+              asOf={d.asOf}
             />
           </>
         )}

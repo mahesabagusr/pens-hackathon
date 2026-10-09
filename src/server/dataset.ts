@@ -31,6 +31,10 @@ function load() {
     decisions: csv("decision_log.csv"),
     features: csv("features.csv"),
     interactions: jsonl("interactions.jsonl"),
+    tickets: csv("support_tickets.csv"),
+    outlets: csv("outlets.csv"),
+    contracts: csv("contracts_billing.csv"),
+    bugs: csv("bugs.csv"),
   };
 }
 

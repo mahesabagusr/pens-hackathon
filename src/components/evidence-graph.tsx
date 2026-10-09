@@ -23,7 +23,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import type { Evidence, GraphEdge, GraphNode, NodeKind, Origin } from "~/server/discovery";
+import type { Label, NeighborGroup } from "~/server/neighbors";
 import { useChat } from "./chat-provider";
+import { EXPLORE_LIMIT, GraphNeighbors, type NeighborState } from "./graph-neighbors";
 import { Icon } from "./icon";
 
 const ORIGIN: Record<Origin, string> = {
@@ -31,6 +33,7 @@ const ORIGIN: Record<Origin, string> = {
   join: "Gabungan record",
   text_claim: "Klaim teks",
   cross_source_match: "Cocok lintas sumber",
+  graph: "Graf (tanpa sitasi)",
 };
 // Line style carries the origin so it does not depend on colour alone.
 const STROKE: Record<Origin, { dash?: string; color: string }> = {
@@ -38,6 +41,7 @@ const STROKE: Record<Origin, { dash?: string; color: string }> = {
   join: { color: "#a1a1aa", dash: "2 4" },
   text_claim: { color: "#ffffff", dash: "8 5" },
   cross_source_match: { color: "#00c758", dash: "3 3" },
+  graph: { color: "#8b8b94", dash: "0 5" }, // round dots, see EvidenceEdge
 };
 const KIND: Record<NodeKind, string> = {
   account: "Akun",
@@ -53,6 +57,19 @@ const KIND: Record<NodeKind, string> = {
 const COLUMN: Record<NodeKind, number> = { interaction: 0, person: 1, account: 2, deal: 2, employee: 2, decision: 3, feature: 3, other: 3 };
 const COL_X = [0, 280, 560, 840];
 const ROW_H = 76;
+// Neo4j label to expand a discovery node with; explored nodes carry their own `type`.
+const LABEL_OF: Partial<Record<NodeKind, Label>> = {
+  account: "Akun",
+  person: "Kontak",
+  deal: "Deal",
+  employee: "Karyawan",
+  interaction: "Interaksi",
+  decision: "Keputusan",
+  feature: "Fitur",
+};
+// Explored edges that restate a discovery edge are dropped. Discovery names two relationships differently.
+const SAME_AS: Record<string, string> = { MEMILIKI_DEAL: "MEMILIKI", MELIBATKAN: "TERLIBAT_DI" };
+const pairKey = (e: GraphEdge) => `${[e.from, e.to].sort().join("|")}|${SAME_AS[e.type] ?? e.type}`;
 
 const ARIA: ComponentProps<typeof ReactFlow>["ariaLabelConfig"] = {
   "node.a11yDescription.default": "Tekan Enter atau Spasi untuk memilih. Escape membatalkan pilihan. Panah memindahkan node yang terpilih.",
@@ -68,7 +85,7 @@ const ARIA: ComponentProps<typeof ReactFlow>["ariaLabelConfig"] = {
   "handle.ariaLabel": "Titik sambung",
 };
 
-type NodeData = { label: string; kind: NodeKind; focus?: boolean; lit?: boolean; dim?: boolean };
+type NodeData = { label: string; kind: NodeKind; focus?: boolean; lit?: boolean; dim?: boolean; type?: string; explored?: boolean };
 type EvNode = Node<NodeData, "evidence">;
 type EdgeData = { origin: Origin; type: string; lit: boolean; dim: boolean };
 type EvEdge = Edge<EdgeData, "evidence">;
@@ -96,16 +113,24 @@ function EvidenceNode({ data, selected }: NodeProps<EvNode>) {
   return (
     <div
       title={data.label}
-      className={`w-[200px] rounded-md border bg-panel px-3 py-1.5 transition-[opacity,border-color] duration-150 ${data.dim ? "opacity-25" : ""} ${
-        selected ? "border-white ring-2 ring-white/30" : data.focus ? "border-accent" : data.lit ? "border-white/70" : "border-line"
-      }`}
+      className={`w-[200px] rounded-md border px-3 py-1.5 transition-[opacity,border-color] duration-150 ${data.dim ? "opacity-25" : ""} ${
+        data.explored ? "animate-[fade-in_150ms_ease-out] border-dashed bg-background motion-reduce:animate-none" : "bg-panel"
+      } ${selected ? "border-white ring-2 ring-white/30" : data.focus ? "border-accent" : data.lit ? "border-white/70" : data.explored ? "border-white/35" : "border-line"}`}
     >
       <Handle type="target" position={Position.Left} id="l" isConnectable={false} className={handle} />
       <Handle type="source" position={Position.Left} id="ls" isConnectable={false} className={handle} />
       <Handle type="source" position={Position.Right} id="r" isConnectable={false} className={handle} />
       <Handle type="target" position={Position.Right} id="rt" isConnectable={false} className={handle} />
       <p className="truncate text-[13px] leading-5 text-ink">{data.label}</p>
-      <p className="text-[11px] leading-4 text-muted">{KIND[data.kind]}</p>
+      <p className="text-[11px] leading-4 text-muted">
+        {data.explored ? (
+          <>
+            <span className="font-mono">graf</span> · {data.type}
+          </>
+        ) : (
+          KIND[data.kind]
+        )}
+      </p>
     </div>
   );
 }
@@ -124,7 +149,8 @@ function EvidenceEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
         style={{
           stroke: selected ? "#ffffff" : s.color,
           strokeDasharray: s.dash,
-          strokeWidth: on ? 2.5 : 1.25,
+          strokeLinecap: data.origin === "graph" ? "round" : undefined,
+          strokeWidth: on ? 2.5 : data.origin === "graph" ? 2 : 1.25,
           opacity: data.dim ? 0.2 : on ? 1 : 0.55,
           transition: "opacity 150ms",
         }}
@@ -154,6 +180,7 @@ type Props = {
   focus?: string[]; // node ids to select first, from ?focus=
   compact?: boolean; // read-only, for chat answers
   account?: string; // account name, for the questions sent to chat
+  asOf?: string; // "Tanggal acuan", so explored neighbors match the discovery date
   className?: string;
 };
 
@@ -165,15 +192,43 @@ export function EvidenceGraph(props: Props) {
   );
 }
 
-function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = false, account, className }: Props) {
+function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, focus = [], compact = false, account, asOf, className }: Props) {
   const chat = useChat();
   const flow = useReactFlow();
-  const [rf, setRf] = useState(() => layout(nodes, focus));
+  const [rf, setRf] = useState(() => layout(baseNodes, focus));
   const [selEdges, setSelEdges] = useState<Set<string>>(new Set());
   const [hiddenOrigins, setHiddenOrigins] = useState<Set<Origin>>(new Set());
   const [hiddenKinds, setHiddenKinds] = useState<Set<NodeKind>>(new Set());
   const [mainOnly, setMainOnly] = useState(false);
   const [view, setView] = useState<"graph" | "list">("graph");
+  // Exploring: fetched neighbor groups per node (kept as a cache), and the groups put on the canvas, keyed `${source}|${group.key}`.
+  const [found, setFound] = useState<Map<string, NeighborState>>(new Map());
+  const [added, setAdded] = useState<Map<string, { source: string; group: NeighborGroup }>>(new Map());
+  const [announce, setAnnounce] = useState("");
+
+  // The canvas is the discovery graph plus explored groups. Explored edges that restate an edge already drawn are dropped,
+  // and an explored node stays only while some explored edge still reaches it.
+  const { nodes, edges, exploredCount } = useMemo(() => {
+    const ids = new Set(baseNodes.map((n) => n.id));
+    const pairs = new Set(baseEdges.map(pairKey));
+    const extraEdges: GraphEdge[] = [];
+    for (const { group } of added.values())
+      for (const e of group.edges) {
+        if (pairs.has(pairKey(e))) continue;
+        pairs.add(pairKey(e));
+        extraEdges.push(e);
+      }
+    const known = new Map<string, GraphNode>();
+    for (const st of found.values()) if (typeof st === "object" && "groups" in st) for (const g of st.groups) for (const n of g.nodes) known.set(n.id, n);
+    const extraNodes = new Map<string, GraphNode>();
+    for (const e of extraEdges) for (const id of [e.from, e.to]) if (!ids.has(id) && known.has(id)) extraNodes.set(id, known.get(id)!);
+    const drawn = (id: string) => ids.has(id) || extraNodes.has(id);
+    return {
+      nodes: [...baseNodes, ...extraNodes.values()],
+      edges: [...baseEdges, ...extraEdges.filter((e) => drawn(e.from) && drawn(e.to))],
+      exploredCount: extraNodes.size,
+    };
+  }, [baseNodes, baseEdges, added, found]);
 
   const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const focusSet = useMemo(() => new Set(focusEvidence), [focusEvidence]);
@@ -190,7 +245,7 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
   const edgeLabel = (e: GraphEdge) => `${e.type}: ${byId.get(e.from)?.label} ke ${byId.get(e.to)?.label} (${ORIGIN[e.origin]})`;
 
   // What is selected decides which evidence is listed and which elements stay lit.
-  const selNodes = rf.filter((n) => n.selected && shown(byId.get(n.id)!)).map((n) => n.id);
+  const selNodes = rf.filter((n) => n.selected && byId.has(n.id) && shown(byId.get(n.id)!)).map((n) => n.id);
   const selEdgeList = visibleEdges.filter((e) => selEdges.has(edgeId(e)));
   const picking = selNodes.length + selEdgeList.length > 0;
   const chosen = picking
@@ -211,18 +266,29 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
       : "Semua sumber untuk akun ini";
 
   const onlyNode = selNodes.length === 1 && !selEdgeList.length ? selNodes[0] : null;
+  const one = onlyNode ? byId.get(onlyNode)! : null;
+  const oneEdge = selEdgeList.length === 1 && !selNodes.length ? selEdgeList[0] : null;
+  const fromOf = (id: string) => {
+    const src = [...added.values()].find((a) => a.group.nodes.some((n) => n.id === id))?.source;
+    return src ? byId.get(src)?.label : undefined;
+  };
   const setSelectedNode = chat?.setSelectedNode;
   useEffect(() => {
     if (!compact) setSelectedNode?.(onlyNode);
   }, [compact, onlyNode, setSelectedNode]);
 
   const xOf = new Map(rf.map((n) => [n.id, n.position.x]));
-  const flowNodes: EvNode[] = rf.map((n) => ({
-    ...n,
-    hidden: !shown(byId.get(n.id)!),
-    ariaLabel: `${n.data.label}, ${KIND[n.data.kind]}. Tampilkan bukti yang terhubung.`,
-    data: { ...n.data, lit: litNodes.has(n.id), dim: picking && !litNodes.has(n.id) },
-  }));
+  // rf keeps positions of explored nodes that were removed again; only nodes still on the canvas are drawn.
+  const flowNodes: EvNode[] = rf
+    .filter((n) => byId.has(n.id))
+    .map((n) => ({
+      ...n,
+      hidden: !shown(byId.get(n.id)!),
+      ariaLabel: n.data.explored
+        ? `${n.data.label}, ${n.data.type}, dari graf, tanpa sitasi`
+        : `${n.data.label}, ${KIND[n.data.kind]}. Tampilkan bukti yang terhubung.`,
+      data: { ...n.data, lit: litNodes.has(n.id), dim: picking && !litNodes.has(n.id) },
+    }));
   const visibleIds = new Set(visibleEdges.map(edgeId));
   const flowEdges: EvEdge[] = edges.map((e) => {
     const id = edgeId(e);
@@ -260,12 +326,74 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
     setRf((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)));
     setSelEdges(new Set([edgeId(e)]));
   };
-  const fit = () => flow.fitView({ padding: 0.15, duration: matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 200 });
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fit = () => flow.fitView({ padding: 0.15, duration: reduced() ? 0 : 200 });
+  // Resets the discovery layout only; explored nodes keep where they were put.
   const reset = () => {
-    setRf(layout(nodes, []));
+    setRf((prev) => [...layout(baseNodes, []), ...prev.filter((n) => n.data.explored)]);
     setSelEdges(new Set());
     requestAnimationFrame(fit);
   };
+
+  const labelOf = (n: GraphNode) => (n.type as Label | undefined) ?? LABEL_OF[n.kind];
+  const load = async (n: GraphNode) => {
+    const label = labelOf(n);
+    const st = found.get(n.id);
+    if (!label || st === "loading" || (typeof st === "object" && "groups" in st)) return;
+    setFound((m) => new Map(m).set(n.id, "loading"));
+    let next: NeighborState;
+    try {
+      const res = await fetch(`/api/graph/neighbors?${new URLSearchParams({ id: n.id, label, ...(asOf ? { asof: asOf } : {}) })}`);
+      next = res.ok ? await res.json() : { error: res.status === 401 ? "auth" : res.status === 404 ? "missing" : res.status === 503 ? "down" : "failed" };
+    } catch {
+      next = { error: "down" };
+    }
+    setFound((m) => new Map(m).set(n.id, next));
+    if (typeof next === "object" && "groups" in next) setAnnounce(`${next.groups.length} kelompok tetangga untuk ${n.label}.`);
+  };
+  // What a group would add right now: edges not already drawn, and nodes not already on the canvas.
+  const drawnPairs = new Set(edges.map(pairKey));
+  const fresh = (g: NeighborGroup) => ({
+    edges: g.edges.filter((e) => !drawnPairs.has(pairKey(e))).length,
+    nodes: g.nodes.filter((n) => !byId.has(n.id)).length,
+  });
+  const addGroups = (source: string, groups: NeighborGroup[]) => {
+    const newNodes = [...new Map(groups.flatMap((g) => g.nodes).filter((n) => !byId.has(n.id)).map((n) => [n.id, n])).values()];
+    if (exploredCount + newNodes.length > EXPLORE_LIMIT) return;
+    setAdded((prev) => {
+      const next = new Map(prev);
+      for (const g of groups) next.set(`${source}|${g.key}`, { source, group: g });
+      return next;
+    });
+    // New nodes go in a column (8 per column) right of everything drawn, centred on the node they came from.
+    const drawn = rf.filter((n) => byId.has(n.id));
+    const x0 = Math.max(...drawn.map((n) => n.position.x)) + 280;
+    const y0 = drawn.find((n) => n.id === source)?.position.y ?? 0;
+    const rows = Math.min(newNodes.length, 8);
+    const placed: EvNode[] = newNodes.map((n, i) => ({
+      id: n.id,
+      type: "evidence",
+      position: { x: x0 + Math.floor(i / 8) * 230, y: y0 + ((i % 8) - (rows - 1) / 2) * 60 },
+      data: { label: n.label, kind: n.kind, type: n.type, explored: true },
+    }));
+    const ids = new Set(placed.map((n) => n.id));
+    setRf((prev) => [...prev.filter((n) => !ids.has(n.id)), ...placed]);
+    const counts = groups.map((g) => `${fresh(g).nodes} ${g.label}`).join(", ");
+    setAnnounce(`${newNodes.length} node ditambahkan dari graf: ${counts}.`);
+    const around = [source, ...ids, ...groups.flatMap((g) => g.edges.flatMap((e) => [e.from, e.to]))];
+    // Wait a frame so React Flow has measured the new nodes before fitting to them.
+    setTimeout(() => flow.fitView({ nodes: [...new Set(around)].map((id) => ({ id })), padding: 0.2, duration: reduced() ? 0 : 300 }), 50);
+  };
+  const removeGroups = (keys: string[], what: string) => {
+    if (!keys.length) return;
+    setAdded((prev) => {
+      const next = new Map(prev);
+      for (const k of keys) next.delete(k);
+      return next;
+    });
+    setAnnounce(`${what} dihapus dari graf.`);
+  };
+  const keysFrom = (source: string) => [...added.entries()].filter(([, a]) => a.source === source).map(([k]) => k);
   // Chat graphs can mount inside a hidden drawer (0×0), where the initial fit is useless; refit once they get a size.
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -291,6 +419,8 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
       onKeyDown={(e) => {
         if (compact || (e.target as HTMLElement).closest("input, textarea, button")) return;
         if (e.key === "f") fit();
+        else if (e.key === "e" && onlyNode) load(byId.get(onlyNode)!);
+        else if (e.key === "E" && onlyNode) removeGroups(keysFrom(onlyNode), `Eksplorasi dari ${byId.get(onlyNode)!.label}`);
         else if (e.key === "+" || e.key === "=") flow.zoomIn();
         else if (e.key === "-") flow.zoomOut();
       }}
@@ -320,7 +450,7 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
       >
         <Background gap={24} size={1} color="#ffffff14" />
         <Controls showInteractive={false} position="bottom-left" />
-        {!compact && <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => ((n.data as NodeData).focus ? "#00c758" : "#3f3f46")} maskColor="#08080acc" />}
+        {!compact && <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => ((n.data as NodeData).focus ? "#00c758" : (n.data as NodeData).explored ? "#26262b" : "#3f3f46")} maskColor="#08080acc" />}
       </ReactFlow>
     </div>
   );
@@ -343,7 +473,7 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
         {origins.map((o) => (
           <button key={o} type="button" aria-pressed={!hiddenOrigins.has(o)} onClick={() => setHiddenOrigins(toggle(hiddenOrigins, o))} className={chip(!hiddenOrigins.has(o))}>
             <svg width="18" height="6" aria-hidden>
-              <line x1="0" y1="3" x2="18" y2="3" stroke={STROKE[o].color} strokeDasharray={STROKE[o].dash} strokeWidth={2} />
+              <line x1="1" y1="3" x2="17" y2="3" stroke={STROKE[o].color} strokeDasharray={STROKE[o].dash} strokeLinecap={o === "graph" ? "round" : undefined} strokeWidth={2} />
             </svg>
             {ORIGIN[o]}
           </button>
@@ -363,6 +493,11 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
               <Icon name="list" className="size-3.5" /> Daftar
             </button>
           </div>
+          {exploredCount > 0 && (
+            <button type="button" onClick={() => removeGroups([...added.keys()], "Semua eksplorasi")} className={chip(false)}>
+              <Icon name="trash" className="size-3.5" /> Hapus eksplorasi ({exploredCount})
+            </button>
+          )}
           <button type="button" onClick={reset} className={chip(false)}>
             <Icon name="reset" className="size-3.5" /> Atur ulang
           </button>
@@ -415,33 +550,104 @@ function Graph({ nodes, edges, evidence, focusEvidence, focus = [], compact = fa
             <p className="mt-0.5 text-xs text-muted" aria-live="polite">
               {active.size} sumber terpilih dari {evidence.length}.{picking ? " Escape untuk kembali ke jalur utama." : ""}
             </p>
+            <p className="sr-only" aria-live="polite">
+              {announce}
+            </p>
           </div>
-          <ol className="space-y-2 overflow-y-auto p-3">
-            {[...evidence]
-              .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)))
-              .map((e) => (
-                <li key={e.id} className={`rounded-md border p-2.5 text-sm ${active.has(e.id) ? "border-accent/70" : "border-line opacity-60"}`}>
-                  <p className="font-medium">{e.label}</p>
-                  <p className="mt-0.5 break-all font-mono text-[11px] text-muted">
-                    {e.file}:{e.row} · {e.column}
-                    {e.date ? ` · ${e.date}` : ""}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-muted">{ORIGIN[e.origin]}</p>
-                  {e.excerpt && <blockquote className="mt-1.5 line-clamp-4 border-l border-line pl-2 text-xs text-muted">{e.excerpt}</blockquote>}
-                  {active.has(e.id) && chat && (
-                    <button
-                      type="button"
-                      onClick={() => chat.ask(`Jelaskan bukti "${e.label}" (${e.file} baris ${e.row}) untuk ${account ?? "akun ini"}: apa isinya dan apa artinya bagi keputusan pembelian?`)}
-                      className="mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-accent hover:underline pointer-coarse:min-h-11"
-                    >
-                      <Icon name="chat" className="size-3.5" /> Tanya chat tentang ini
-                    </button>
-                  )}
-                </li>
-              ))}
-          </ol>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {one?.explored && (
+              <div className="border-b border-line p-3">
+                <p className="text-xs text-muted">
+                  <span className="font-mono">graf</span> · {one.type}
+                  {fromOf(one.id) && <> · ditambahkan dari {fromOf(one.id)}</>}
+                </p>
+                <Fields props={one.props} />
+                <p className="mt-2 break-all font-mono text-[11px] text-muted">
+                  {one.cite ? `Sumber: ${one.cite.file}:${one.cite.row}` : "Tidak ada baris sumber di data/"}
+                </p>
+                {chat && (
+                  <button
+                    type="button"
+                    onClick={() => chat.ask(`Jelaskan ${one.type} ${one.label} (${one.id}) dan hubungannya dengan ${account ?? "akun ini"}.`)}
+                    className="mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-accent hover:underline pointer-coarse:min-h-11"
+                  >
+                    <Icon name="chat" className="size-3.5" /> Tanya chat tentang ini
+                  </button>
+                )}
+              </div>
+            )}
+            {oneEdge?.origin === "graph" && (
+              <div className="border-b border-line p-3">
+                <p className="font-mono text-xs">
+                  {oneEdge.type}
+                  {oneEdge.count ? ` · ${oneEdge.count} catatan` : ""}
+                </p>
+                <Fields props={oneEdge.props} />
+                <p className="mt-2 text-[11px] text-muted">Hubungan ini diturunkan oleh loader graf, bukan kutipan dari satu baris data.</p>
+              </div>
+            )}
+            {one && labelOf(one) && (
+              <GraphNeighbors
+                name={one.label}
+                state={found.get(one.id)}
+                added={new Set(keysFrom(one.id).map((k) => k.slice(one.id.length + 1)))}
+                fresh={fresh}
+                room={EXPLORE_LIMIT - exploredCount}
+                onLoad={() => load(one)}
+                onAdd={(groups) => addGroups(one.id, groups)}
+                onRemove={(key) => {
+                  const g = added.get(`${one.id}|${key}`)?.group;
+                  removeGroups([`${one.id}|${key}`], g ? `${g.label} lewat ${g.type}` : "Kelompok");
+                }}
+                onAsk={chat?.ask}
+              />
+            )}
+            {picking && !active.size ? (
+              <p className="p-3 text-xs text-muted">Tidak ada bukti bertanda sumber untuk pilihan ini.</p>
+            ) : (
+              <ol className="space-y-2 p-3">
+                {[...evidence]
+                  .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)))
+                  .map((e) => (
+                    <li key={e.id} className={`rounded-md border p-2.5 text-sm ${active.has(e.id) ? "border-accent/70" : "border-line opacity-60"}`}>
+                      <p className="font-medium">{e.label}</p>
+                      <p className="mt-0.5 break-all font-mono text-[11px] text-muted">
+                        {e.file}:{e.row} · {e.column}
+                        {e.date ? ` · ${e.date}` : ""}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted">{ORIGIN[e.origin]}</p>
+                      {e.excerpt && <blockquote className="mt-1.5 line-clamp-4 border-l border-line pl-2 text-xs text-muted">{e.excerpt}</blockquote>}
+                      {active.has(e.id) && chat && (
+                        <button
+                          type="button"
+                          onClick={() => chat.ask(`Jelaskan bukti "${e.label}" (${e.file} baris ${e.row}) untuk ${account ?? "akun ini"}: apa isinya dan apa artinya bagi keputusan pembelian?`)}
+                          className="mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-accent hover:underline pointer-coarse:min-h-11"
+                        >
+                          <Icon name="chat" className="size-3.5" /> Tanya chat tentang ini
+                        </button>
+                      )}
+                    </li>
+                  ))}
+              </ol>
+            )}
+          </div>
         </section>
       </div>
     </div>
+  );
+}
+
+function Fields({ props }: { props?: Record<string, string> }) {
+  const rows = Object.entries(props ?? {});
+  if (!rows.length) return null;
+  return (
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+      {rows.map(([k, v]) => (
+        <div key={k} className="contents">
+          <dt className="font-mono text-[11px] text-muted">{k}</dt>
+          <dd className="line-clamp-3 break-words">{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

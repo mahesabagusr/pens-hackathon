@@ -68,3 +68,10 @@ html {
   outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
+
+/* Nodes added by exploring Neo4j in Jalur bukti fade in once (opacity only). */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
