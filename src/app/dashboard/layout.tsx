@@ -21,7 +21,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
     accounts = accountOptions();
   } catch {} // the page shows the dataset error; the sidebar still navigates
   return (
-    <DashboardShell user={{ name: user.name, email: user.email }} accounts={accounts} configured={Boolean(process.env.GEMINI_API_KEY)}>
+    <DashboardShell user={{ name: user.name, email: user.email }} accounts={accounts} configured={Boolean(process.env.DEEPSEEK_API_KEY)}>
       {children}
     </DashboardShell>
   );

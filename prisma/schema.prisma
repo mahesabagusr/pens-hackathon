@@ -159,6 +159,22 @@ model Interaction {
   @@index([account_id])
 }
 
+// Jev's reading of one interaction (PRD_JEV.md §8). Written by scripts/judge-interactions.mts, read by discover().
+// No foreign key on purpose: db:load deletes and re-inserts interactions, and paid judgments must survive that.
+model JevJudgment {
+  id             String   @id @default(cuid())
+  interaction_id String
+  version        String // QUESTIONS_VERSION in src/server/jev.ts; a new version re-judges everything
+  model          String // as reported by the API, e.g. "jev-latest"
+  answers        Json // Judgment in src/server/discovery.ts
+  state_hash     String // sha256 of the state sent; a changed hash re-judges the interaction
+  input_tokens   Int
+  output_tokens  Int
+  created_at     DateTime @default(now())
+
+  @@unique([interaction_id, version])
+}
+
 model Bug {
   bug_id          String    @id
   judul           String

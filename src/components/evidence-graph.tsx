@@ -22,7 +22,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
-import type { Evidence, GraphEdge, GraphNode, NodeKind, Origin } from "~/server/discovery";
+import type { Claim, ClaimKind, Evidence, GraphEdge, GraphNode, NodeKind, Origin } from "~/server/discovery";
 import type { Label, NeighborGroup } from "~/server/neighbors";
 import { useChat } from "./chat-provider";
 import { EXPLORE_LIMIT, GraphNeighbors, type NeighborState } from "./graph-neighbors";
@@ -609,13 +609,21 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
                 {[...evidence]
                   .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)))
                   .map((e) => (
-                    <li key={e.id} className={`rounded-md border p-2.5 text-sm ${active.has(e.id) ? "border-accent/70" : "border-line opacity-60"}`}>
-                      <p className="font-medium">{e.label}</p>
+                    <li key={e.id} className={`rounded-md border p-2.5 text-sm ${active.has(e.id) ? "border-accent/70" : "border-line"}`}>
+                      {/* Inactive cards are told apart by border and a muted title, not opacity: dimmed 11px text fell below 4.5:1. */}
+                      <p className={`font-medium ${active.has(e.id) ? "" : "text-muted"}`}>{e.label}</p>
                       <p className="mt-0.5 break-all font-mono text-[11px] text-muted">
                         {e.file}:{e.row} · {e.column}
                         {e.date ? ` · ${e.date}` : ""}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted">{ORIGIN[e.origin]}</p>
+                      {!!e.claims?.length && (
+                        <p className="mt-1.5 flex flex-wrap gap-1.5">
+                          {e.claims.map((c) => (
+                            <ClaimChip key={c.kind} claim={c} />
+                          ))}
+                        </p>
+                      )}
                       {e.excerpt && <blockquote className="mt-1.5 line-clamp-4 border-l border-line pl-2 text-xs text-muted">{e.excerpt}</blockquote>}
                       {active.has(e.id) && chat && (
                         <button
@@ -634,6 +642,44 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
         </section>
       </div>
     </div>
+  );
+}
+
+const CLAIM: Record<ClaimKind, string> = {
+  dm: "klaim pemutus",
+  sign: "klaim penandatangan",
+  technical: "penilai teknis",
+  reference: "minta referensi",
+};
+// The same claims as full sentences, for screen readers.
+const CLAIM_SAID: Record<ClaimKind, string> = {
+  dm: "menyebut siapa pemutus pembelian",
+  sign: "menyebut siapa penandatangan atau penyetuju akhir",
+  technical: "menyebut siapa penilai sisi teknis",
+  reference: "berisi permintaan referensi pelanggan",
+};
+// Who read this text as making the claim: Jev with its probability, or the keyword rules (PRD_JEV.md §6).
+function ClaimChip({ claim }: { claim: Claim }) {
+  const jev = claim.by === "jev" && claim.p !== undefined;
+  return (
+    <span>
+      <span aria-hidden className="inline-flex items-center rounded border border-line px-1.5 py-0.5 text-[11px] text-muted">
+        {jev ? (
+          <>
+            Jev <span className="ml-1 font-mono tabular-nums text-ink">{claim.p!.toFixed(2).replace(".", ",")}</span>
+          </>
+        ) : (
+          "Aturan kata kunci"
+        )}
+        <span className="mx-1">·</span>
+        {CLAIM[claim.kind]}
+      </span>
+      <span className="sr-only">
+        {jev
+          ? `Penilaian Jev: ${Math.round(claim.p! * 100)}% kemungkinan teks ini ${CLAIM_SAID[claim.kind]}.`
+          : `Menurut aturan kata kunci, teks ini ${CLAIM_SAID[claim.kind]}.`}
+      </span>
+    </span>
   );
 }
 

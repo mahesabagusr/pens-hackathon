@@ -42,6 +42,12 @@ services:
       NEO4J_USER: ${NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-password123}
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-} # dashboard chat
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-} # only scripts/judge-interactions.mts needs it
+      JEV_TOKEN_LIMIT: ${JEV_TOKEN_LIMIT:-100000000} # team cap on Jev input tokens
+      JEV_USAGE_FILE: ${JEV_USAGE_FILE:-} # empty = jev-usage.jsonl in the app folder
+      JEV_CHAT_CHECK: ${JEV_CHAT_CHECK:-} # "1" = Jev checks chat answers (spends tokens)
     depends_on:
       migrate: { condition: service_completed_successfully }
       neo4j: { condition: service_healthy }

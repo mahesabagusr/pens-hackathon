@@ -56,6 +56,7 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
           </button>
         </form>
       </header>
+      <Method m={d.method} />
 
       <nav aria-label="Bagian akun" className="mt-6 border-b border-line">
         <ul className="-mb-px flex gap-1 overflow-x-auto [scrollbar-width:none]">
@@ -102,6 +103,23 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
         {tab === "precedents" && <Precedents d={d} />}
       </div>
     </>
+  );
+}
+
+// Which reader turned this account's emails and meeting notes into claims (PRD_JEV.md §6).
+function Method({ m }: { m: Discovery["method"] }) {
+  const total = m.jev + m.rules;
+  if (!total) return null;
+  const jev = `Jev (${m.model}, pertanyaan ${m.version})`;
+  return (
+    <p className="mt-3 text-xs text-muted">
+      Penilaian teks:{" "}
+      {!m.jev
+        ? "aturan kata kunci. Jev belum dijalankan untuk percakapan akun ini."
+        : !m.rules
+          ? `${jev} untuk ${total} dari ${total} percakapan akun ini.`
+          : `${jev} untuk ${m.jev} dari ${total} percakapan; sisanya aturan kata kunci.`}
+    </p>
   );
 }
 

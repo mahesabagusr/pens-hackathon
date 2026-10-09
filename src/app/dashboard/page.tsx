@@ -6,6 +6,7 @@ import { DiscoveryView, TABS, type Tab } from "~/components/discovery-view";
 import { currentUser } from "~/server/auth";
 import { dataset } from "~/server/dataset";
 import { accountOptions, discover, findAccount, rupiah, SNAPSHOT, tanggal } from "~/server/discovery";
+import { judgments } from "~/server/judgments";
 
 export const metadata: Metadata = { title: "Decision Maker Discovery | Decidely" };
 
@@ -59,7 +60,7 @@ async function Discover({ searchParams }: { searchParams: Search }) {
     );
   }
   const account = q ? findAccount(q) : null;
-  const result = account ? discover(account.account_id, asOf) : null;
+  const result = account ? discover(account.account_id, asOf, await judgments()) : null;
   if (result) return <DiscoveryView d={result} tab={tab} focus={focus} />;
 
   return (

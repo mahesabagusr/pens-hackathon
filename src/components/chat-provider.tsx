@@ -2,9 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { Cite, Visual } from "~/server/chat-visuals";
+import type { Check } from "~/server/jev";
 
 export type Query = { cypher: string; rows: number; error?: string };
-export type Msg = { role: "user" | "assistant"; content: string; queries?: Query[]; seconds?: number; visuals?: Visual[]; cites?: Cite[] };
+export type Msg = { role: "user" | "assistant"; content: string; queries?: Query[]; seconds?: number; visuals?: Visual[]; cites?: Cite[]; check?: Check };
 // The account on screen. graphIds lets chat graphs offer "highlight in Jalur bukti" only for nodes that exist there.
 export type Scope = { accountId: string; name: string; asOf: string; graphIds: string[] };
 type ChatError = { text: string; retry: string; login?: boolean };
@@ -103,7 +104,7 @@ export function ChatProvider({ configured, children }: { configured: boolean; ch
           return;
         }
         if (!res.ok || !data.answer) throw new Error(data.error ?? "Tidak ada jawaban yang kembali.");
-        setMsgs([...next, { role: "assistant", content: data.answer, queries: data.queries, seconds: data.seconds, visuals: data.visuals, cites: data.cites }]);
+        setMsgs([...next, { role: "assistant", content: data.answer, queries: data.queries, seconds: data.seconds, visuals: data.visuals, cites: data.cites, check: data.check }]);
         setScoped(true);
       } catch (e) {
         setError({ text: e instanceof Error ? e.message : "Permintaan gagal.", retry: question });

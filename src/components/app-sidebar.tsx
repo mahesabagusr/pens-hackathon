@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { logout } from "~/server/actions/auth";
 import { AccountSwitcher } from "./account-switcher";
 import { Icon, type IconName } from "./icon";
+import { Logo } from "./logo";
 
 export type SidebarUser = { name: string | null; email: string };
 export type SidebarAccount = { id: string; name: string; type: string };
@@ -45,7 +45,7 @@ export function AppSidebar({
       <div className={`flex h-12 shrink-0 items-center border-b border-line px-2 ${collapsed ? "justify-center" : "justify-between pl-3"}`}>
         {!collapsed && (
           <Link href="/dashboard" onClick={onNavigate} className="flex min-h-10 items-center">
-            <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" className="h-6 w-auto" priority />
+            <Logo size="md" priority />
           </Link>
         )}
         <button

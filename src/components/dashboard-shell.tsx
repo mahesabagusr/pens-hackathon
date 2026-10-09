@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppSidebar, type SidebarAccount, type SidebarUser } from "./app-sidebar";
 import { Chat } from "./chat";
 import { ChatProvider, useChat } from "./chat-provider";
 import { Icon } from "./icon";
+import { Logo } from "./logo";
 
 const COLLAPSED = "decidely.sidebar-collapsed";
 
@@ -94,7 +94,7 @@ function Frame({ user, accounts, children }: Props) {
             <Icon name="menu" />
           </button>
           <Link href="/dashboard" className="flex min-h-10 items-center lg:hidden">
-            <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" className="h-5 w-auto" />
+            <Logo size="sm" />
           </Link>
           <button
             ref={chatButton}
