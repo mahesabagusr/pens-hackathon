@@ -16,8 +16,8 @@ const plexSans = localFont({ src: "./fonts/IBMPlexSans-Medium.ttf", weight: "500
 const plexMono = localFont({ src: "./fonts/IBMPlexMono-Regular.ttf", weight: "400", variable: "--font-plex-mono", display: "swap" });
 
 export const metadata: Metadata = {
-  title: "Decision Dictionary",
-  description: "Every discount, exception and feature promise at KasirNusa as a dictionary entry, linked to the deal, email and roadmap behind it.",
+  title: "Decidely",
+  description: "Know who decides before you make the call: the decision maker, the evidence behind it, and who to contact first.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

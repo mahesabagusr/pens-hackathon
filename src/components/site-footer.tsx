@@ -13,8 +13,7 @@ export function SiteFooter() {
             <Logo size="lg" />
           </ScrollLink>
           <p className="mt-2 max-w-sm text-sm text-muted">
-            Every discount, exception and feature promise as a dictionary entry, linked to the deal, the email and the roadmap
-            behind it.
+            Finds who decides a purchase, shows the evidence path behind it, and plans who to contact first.
           </p>
         </div>
 
@@ -22,9 +21,10 @@ export function SiteFooter() {
           <h2 className="text-sm font-medium">Product</h2>
           <ul className="mt-2">
             {[
-              ["/#problem", "Problem"],
-              ["/#entry", "Entry"],
-              ["/#trace", "Trace"],
+              ["/#decide", "Who decides"],
+              ["/#evidence", "Evidence"],
+              ["/#contact", "Who to call"],
+              ["/#sources", "Sources"],
             ].map(([href, label]) => (
               <li key={href}>
                 <ScrollLink href={href} className={link}>

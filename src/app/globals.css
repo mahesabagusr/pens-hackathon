@@ -149,6 +149,8 @@ html {
   .sidebar-footer { padding-top:8px; }
   .sidebar-profile { margin-top:0; padding-top:12px; padding-bottom:12px; }
 }
+/* The landing navbar reuses .sidebar-row for its profile menu; keep those rows finger-sized on touch screens. */
+@media (pointer:coarse) { #profile-menu .sidebar-row, #mobile-menu .sidebar-row { min-height:44px; } }
 
 /* Information cards: raised header surface, full-width divider and inset content. */
 .information-card { min-width:0; overflow:hidden; border:1px solid #ffffff16; border-radius:20px; background:#131316; box-shadow:0 3px 12px #00000026,inset 0 1px 0 #ffffff08; }
@@ -260,15 +262,16 @@ html {
 .information-card-header { background:linear-gradient(180deg,#ffffff04,#ffffff00); }
 .decidely-sidebar .sidebar-section-dots svg { width:14px; height:14px; stroke-width:2; }
 
-/* Shared button surface: radial inner light, a 30% white rim and an outer dark stroke. */
-:is(button, a.bg-accent, a.evidence-action-button, .account-tabs a.is-active):not(.sidebar-row):not(.prospect-preview-tab button):not(.sidebar-collapse,.sidebar-logout-button,.dashboard-chat-button,.account-date-form button,.evidence-action-button) {
+/* Shared button surface: radial inner light, a 30% white rim and an outer dark stroke.
+   .nav-profile-button is exempt: the landing navbar's profile button sits on the bar without a box. */
+:is(button, a.bg-accent, a.evidence-action-button, .account-tabs a.is-active):not(.sidebar-row):not(.prospect-preview-tab button):not(.sidebar-collapse,.sidebar-logout-button,.dashboard-chat-button,.account-date-form button,.evidence-action-button,.nav-profile-button) {
   border:1px solid rgba(255,255,255,.30);
   border-radius:8px;
   background:radial-gradient(100% 100% at 50% 0%,rgba(255,255,255,.30) 0%,rgba(255,255,255,0) 100%),var(--button-base,#09090b);
   box-shadow:0 0 0 1px #121212;
   transition:filter .15s,border-color .15s;
 }
-:is(button, a.bg-accent, a.evidence-action-button, .account-tabs a.is-active):not(.sidebar-row):not(.prospect-preview-tab button):not(.sidebar-collapse,.sidebar-logout-button,.dashboard-chat-button,.account-date-form button,.evidence-action-button):hover:not(:disabled) { filter:brightness(1.15); border-color:#ffffff66; }
+:is(button, a.bg-accent, a.evidence-action-button, .account-tabs a.is-active):not(.sidebar-row):not(.prospect-preview-tab button):not(.sidebar-collapse,.sidebar-logout-button,.dashboard-chat-button,.account-date-form button,.evidence-action-button,.nav-profile-button):hover:not(:disabled) { filter:brightness(1.15); border-color:#ffffff66; }
 :is(button.bg-accent, a.bg-accent) { --button-base:#00a84c; color:#03170c; }
 button.decision-ask-button { --button-base:#17462e; color:#b8f2cd; }
 .decision-filters button:not(.is-active) { --button-base:#141418; }
