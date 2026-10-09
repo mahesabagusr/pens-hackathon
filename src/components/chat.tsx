@@ -78,7 +78,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <div ref={log} role="log" aria-live="polite" aria-busy={pending} className="flex-1 space-y-5 overflow-y-auto p-4">
+      <div ref={log} role="log" aria-live="polite" aria-busy={pending} className="relative flex-1 space-y-5 overflow-y-auto p-4">
         {msgs.length === 0 && !pending && !error && (
           <div>
             <p className="font-medium">{scope ? `Tanya tentang ${scope.name}` : "Tanya tentang keputusan"}</p>
@@ -288,7 +288,7 @@ function RecordDrawer({ record, onClose }: { record: Cite | null; onClose: () =>
               </button>
             </form>
           </div>
-          <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 gap-y-2 overflow-y-auto p-4 text-sm">
+          <dl className="relative grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 gap-y-2 overflow-y-auto p-4 text-sm">
             {Object.entries(record.fields)
               .filter(([, v]) => v)
               .map(([k, v]) => (

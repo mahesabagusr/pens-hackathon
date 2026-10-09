@@ -508,7 +508,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
         {view === "graph" ? (
           canvas
         ) : (
-          <div className="max-h-[min(68dvh,44rem)] min-w-0 flex-1 overflow-auto">
+          <div className="relative max-h-[min(68dvh,44rem)] min-w-0 flex-1 overflow-auto">
             <table className="w-full min-w-[36rem] text-left text-sm">
               <caption className="sr-only">Semua relasi yang tampil di graph</caption>
               <thead className="sticky top-0 bg-panel text-xs text-muted">
@@ -554,7 +554,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
               {announce}
             </p>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="relative min-h-0 flex-1 overflow-y-auto">
             {one?.explored && (
               <div className="border-b border-line p-3">
                 <p className="text-xs text-muted">

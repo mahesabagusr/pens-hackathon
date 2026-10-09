@@ -60,7 +60,7 @@ export function AppSidebar({
         </button>
       </div>
 
-      <nav aria-label="Navigasi dashboard" className="flex-1 space-y-5 overflow-y-auto p-2">
+      <nav aria-label="Navigasi dashboard" className="relative flex-1 space-y-5 overflow-y-auto p-2">
         {collapsed ? (
           <button type="button" onClick={onCollapse} aria-label="Cari akun" title="Cari akun" className={look(false)}>
             <Icon name="search" />
