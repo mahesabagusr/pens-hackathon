@@ -2,8 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "csv-parse/sync";
 
-// Read straight from data/ so every answer can cite file + row, which the database copy no longer knows.
-// `_row` is the 1-based line number in the source file (CSV header is line 1), kept as a string like every other field.
 export type Row = Record<string, string>;
 
 const DIR = join(process.cwd(), "data");
@@ -40,6 +38,5 @@ function load() {
 
 export type Dataset = ReturnType<typeof load>;
 
-// ponytail: loaded once per server process; restart after editing data/. Add a file watcher if data changes live.
 let cache: Dataset | undefined;
 export const dataset = () => (cache ??= load());

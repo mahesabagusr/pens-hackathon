@@ -144,7 +144,7 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <NextStepsCard key={`${d.account.id}-${d.asOf}`} steps={d.steps.map((step) => step.text)} owner={d.deal?.owner ?? null} />
+        <NextStepsCard steps={d.steps.map((step) => step.text)} owner={d.deal?.owner ?? null} />
         <InformationCard id="unknowns" title="Belum diketahui">
           {d.unknowns.length ? (
             <ol className="unknown-list">
