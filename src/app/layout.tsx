@@ -1,19 +1,21 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { SessionNav } from "./session-nav";
 import { TRPCReactProvider } from "~/trpc/client";
 
 const glitch = localFont({ src: "./fonts/BasedashGlitch-500.woff2", weight: "500", variable: "--font-glitch" });
 
 export const metadata: Metadata = {
   title: "Decision Dictionary",
-  description: "Ask a context graph who made each discount, exception and feature promise at KasirNusa, and why.",
+  description: "Every discount, exception and feature promise at KasirNusa as a dictionary entry, linked to the deal, email and roadmap behind it.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${glitch.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
+        <SessionNav />
         <TRPCReactProvider>{children}</TRPCReactProvider>
       </body>
     </html>

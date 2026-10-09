@@ -11,6 +11,8 @@ model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  // scrypt "salt:hash" from src/server/auth.ts. Null for users created before login existed: they cannot log in.
+  passwordHash String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
