@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AppSidebar, type SidebarAccount, type SidebarUser } from "./app-sidebar";
 import { Chat } from "./chat";
 import { ChatProvider, useChat } from "./chat-provider";
+import { SourceProvider, SourcePanel, useSources } from "./source-provider";
 import { Icon } from "./icon";
 import { ProspectPreviewTabs } from "./prospect-preview-tabs";
 
@@ -15,13 +16,14 @@ type Props = { user: SidebarUser; accounts: SidebarAccount[]; configured: boolea
 export function DashboardShell(props: Props) {
   return (
     <ChatProvider configured={props.configured}>
-      <Frame {...props} />
+      <SourceProvider><Frame {...props} /></SourceProvider>
     </ChatProvider>
   );
 }
 
 function Frame({ user, accounts, children }: Props) {
   const chat = useChat()!;
+  const sources = useSources()!;
   const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState(false);
   const chatButton = useRef<HTMLButtonElement>(null);
@@ -95,14 +97,14 @@ function Frame({ user, accounts, children }: Props) {
             <Icon name="menu" />
           </button>
           <Suspense fallback={null}><ProspectPreviewTabs accounts={accounts} /></Suspense>
-          <div className={`dashboard-chat-overlay ${chat.docked ? "xl:hidden" : ""}`}>
+          <div className={`dashboard-chat-overlay ${chat.docked && !sources.selected ? "xl:hidden" : ""}`}>
           <button
             ref={chatButton}
             type="button"
-            onClick={chat.toggle}
+            onClick={() => { sources.close(); chat.toggle(); }}
             aria-controls="chat"
             className={`dashboard-chat-button flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-sm transition-colors duration-150 hover:border-white/50 pointer-coarse:min-h-11 ${
-              chat.docked ? "xl:hidden" : ""
+              chat.docked && !sources.selected ? "xl:hidden" : ""
             }`}
           >
             <Icon name="chat" className="size-4" />
@@ -115,16 +117,17 @@ function Frame({ user, accounts, children }: Props) {
         </main>
       </div>
 
-      {chat.drawer && <div className="fixed inset-0 z-30 bg-black/60 xl:hidden" onClick={closeChat} aria-hidden />}
+      {chat.drawer && !sources.selected && <div className="fixed inset-0 z-30 bg-black/60 xl:hidden" onClick={closeChat} aria-hidden />}
       <aside
         id="chat"
         aria-label="Chat"
-        className={`${chat.drawer ? "fixed inset-0 z-40 flex sm:left-auto sm:w-[380px]" : "hidden"} ${
-          chat.docked ? "xl:static xl:z-auto xl:flex xl:w-[380px]" : "xl:hidden"
+        className={`${chat.drawer && !sources.selected ? "fixed inset-0 z-40 flex sm:left-auto sm:w-[380px]" : "hidden"} ${
+          chat.docked && !sources.selected ? "xl:static xl:z-auto xl:flex xl:w-[380px]" : "xl:hidden"
         } shrink-0 flex-col border-l border-line bg-panel`}
       >
         <Chat onClose={closeChat} />
       </aside>
+      <SourcePanel />
     </div>
   );
 }

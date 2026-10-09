@@ -7,11 +7,12 @@ export function NextStepsCard({ steps, owner }: { steps: string[]; owner: string
   const [completed, setCompleted] = useState<string[]>([]);
   return (
     <InformationCard id="steps" title="Langkah berikutnya" detail={<span aria-live="polite">{completed.length}/{steps.length} selesai</span>}>
-      <ul className="next-step-list">
-        {steps.map((text) => (
+      <ol className="next-step-list">
+        {steps.map((text, index) => (
           <li key={text} className="next-step-item">
             <label className="next-step-task">
-              <input type="checkbox" aria-label={`Tandai selesai: ${text}`} className="next-step-progress" checked={completed.includes(text)} onChange={(event) => setCompleted((items) => event.target.checked ? [...items, text] : items.filter((item) => item !== text))} />
+              <input type="checkbox" aria-label={`Tandai selesai: ${text}`} className="next-step-progress sr-only" checked={completed.includes(text)} onChange={(event) => setCompleted((items) => event.target.checked ? [...items, text] : items.filter((item) => item !== text))} />
+              <span className="sidebar-count unknown-number next-step-number" aria-hidden="true">{index + 1}</span>
               <span className="next-step-text">{text}</span>
             </label>
             <span className="next-step-assignee" title={owner ? "Pemegang deal" : "Belum ada pekerja yang ditetapkan"}>
@@ -20,7 +21,7 @@ export function NextStepsCard({ steps, owner }: { steps: string[]; owner: string
             </span>
           </li>
         ))}
-      </ul>
+      </ol>
     </InformationCard>
   );
 }

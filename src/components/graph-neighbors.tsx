@@ -34,23 +34,21 @@ export function GraphNeighbors({ name, state, added, fresh, room, onLoad, onAdd,
 
   return (
     <div className="border-b border-line p-3">
-      <h4 className="text-xs font-medium">Tetangga di graf</h4>
-      <p className="mt-0.5 text-[11px] text-muted">Hubungan dari Neo4j. Bukan bukti bertanda sumber.</p>
+      <h4 className="text-xs font-medium">Korelasi Lainnya</h4>
 
       {!result && (
         <button
           type="button"
           onClick={onLoad}
           disabled={state === "loading"}
-          className={`${button} mt-2 border-line hover:border-white/50`}
+          className={`${button} evidence-action-button graph-neighbors-action mt-2`}
         >
           {state === "loading" ? (
             <span className="size-3.5 animate-spin rounded-full border-2 border-muted border-t-transparent motion-reduce:animate-none" aria-hidden />
           ) : (
             <Icon name="graph" className="size-3.5" />
           )}
-          {state === "loading" ? "Memuat tetangga…" : "Tampilkan tetangga"}
-          {state !== "loading" && <kbd className="font-mono text-[10px] text-muted">e</kbd>}
+          {state === "loading" ? "Memuat…" : "Lihat"}
         </button>
       )}
 

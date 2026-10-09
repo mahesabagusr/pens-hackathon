@@ -7,6 +7,7 @@ import type { Cite } from "~/server/chat-visuals";
 import type { Check } from "~/server/jev";
 import { ChatVisual } from "./chat-visual";
 import { useChat } from "./chat-provider";
+import { useSources } from "./source-provider";
 import { Icon } from "./icon";
 
 const GLOBAL = [
@@ -24,9 +25,10 @@ const iconButton =
 // Lets any button on a dashboard page put a question to the chat.
 export function AskButton({ question, className, children }: { question: string; className?: string; children: React.ReactNode }) {
   const chat = useChat();
+  const sources = useSources();
   if (!chat) return null;
   return (
-    <button type="button" className={className} onClick={() => chat.ask(question)}>
+    <button type="button" className={className} onClick={() => { sources?.close(); chat.ask(question); }}>
       {children}
     </button>
   );
@@ -66,13 +68,13 @@ export function Chat({ onClose }: { onClose: () => void }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
         <h2 className="text-sm font-medium">Tanya graph</h2>
-        <div className="ml-auto flex items-center">
+        <div className="chat-header-actions ml-auto flex items-center">
           {msgs.length > 0 && (
-            <button type="button" onClick={chat.clear} aria-label="Hapus percakapan" title="Hapus percakapan" className={iconButton}>
+            <button type="button" onClick={chat.clear} aria-label="Hapus percakapan" title="Hapus percakapan" className={`${iconButton} chat-utility-button`}>
               <Icon name="trash" className="size-4" />
             </button>
           )}
-          <button type="button" onClick={onClose} aria-label="Tutup chat" title="Tutup chat" className={iconButton}>
+          <button type="button" onClick={onClose} aria-label="Tutup chat" title="Tutup chat" className={`${iconButton} chat-utility-button`}>
             <Icon name="close" className="size-4" />
           </button>
         </div>
@@ -247,7 +249,7 @@ function Answer({ text, cites, onCite }: { text: string; cites: Cite[]; onCite: 
             type="button"
             onClick={() => onCite(c)}
             title={`${c.label} · ${c.file}:${c.row}`}
-            className="mx-0.5 inline-flex cursor-pointer items-center rounded border border-accent/50 px-1 font-mono text-xs text-accent transition-colors duration-150 hover:bg-accent hover:text-black"
+            className="chat-citation mx-0.5 inline-flex cursor-pointer items-center px-1 font-mono text-xs text-accent transition-colors duration-150"
           >
             {part}
           </button>
@@ -283,7 +285,7 @@ function RecordDrawer({ record, onClose }: { record: Cite | null; onClose: () =>
               </p>
             </div>
             <form method="dialog">
-              <button aria-label="Tutup" className={iconButton}>
+              <button aria-label="Tutup" className={`${iconButton} chat-utility-button`}>
                 <Icon name="close" className="size-4" />
               </button>
             </form>

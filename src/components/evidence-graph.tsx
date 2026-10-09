@@ -8,7 +8,6 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   Handle,
-  MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -27,6 +26,7 @@ import type { Label, NeighborGroup } from "~/server/neighbors";
 import { useChat } from "./chat-provider";
 import { EXPLORE_LIMIT, GraphNeighbors, type NeighborState } from "./graph-neighbors";
 import { Icon } from "./icon";
+import { SourceLabel } from "./source-label";
 
 const ORIGIN: Record<Origin, string> = {
   record: "Record",
@@ -107,7 +107,7 @@ function layout(nodes: GraphNode[], selected: string[]): EvNode[] {
   });
 }
 
-// Hidden handles on both sides, so an edge can leave and enter on whichever side faces the other node.
+// Handles on all four sides let edges follow the relative node positions as nodes move.
 const handle = "pointer-events-none! size-1! min-h-0! min-w-0! border-0! bg-transparent!";
 function EvidenceNode({ data, selected }: NodeProps<EvNode>) {
   return (
@@ -115,12 +115,16 @@ function EvidenceNode({ data, selected }: NodeProps<EvNode>) {
       title={data.label}
       className={`w-[200px] rounded-md border px-3 py-1.5 transition-[opacity,border-color] duration-150 ${data.dim ? "opacity-25" : ""} ${
         data.explored ? "animate-[fade-in_150ms_ease-out] border-dashed bg-background motion-reduce:animate-none" : "bg-panel"
-      } ${selected ? "border-white ring-2 ring-white/30" : data.focus ? "border-accent" : data.lit ? "border-white/70" : data.explored ? "border-white/35" : "border-line"}`}
+      } ${selected ? "border-accent ring-2 ring-accent/30" : data.focus || data.lit ? "border-accent" : data.explored ? "border-white/35" : "border-line"}`}
     >
       <Handle type="target" position={Position.Left} id="l" isConnectable={false} className={handle} />
       <Handle type="source" position={Position.Left} id="ls" isConnectable={false} className={handle} />
       <Handle type="source" position={Position.Right} id="r" isConnectable={false} className={handle} />
       <Handle type="target" position={Position.Right} id="rt" isConnectable={false} className={handle} />
+      <Handle type="target" position={Position.Top} id="t" isConnectable={false} className={handle} />
+      <Handle type="source" position={Position.Top} id="ts" isConnectable={false} className={handle} />
+      <Handle type="target" position={Position.Bottom} id="b" isConnectable={false} className={handle} />
+      <Handle type="source" position={Position.Bottom} id="bs" isConnectable={false} className={handle} />
       <p className="truncate text-[13px] leading-5 text-ink">{data.label}</p>
       <p className="text-[11px] leading-4 text-muted">
         {data.explored ? (
@@ -155,7 +159,7 @@ function EvidenceEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, 
           transition: "opacity 150ms",
         }}
       />
-      {on && (
+      {selected && (
         <EdgeLabelRenderer>
           <div
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
@@ -277,7 +281,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
     if (!compact) setSelectedNode?.(onlyNode);
   }, [compact, onlyNode, setSelectedNode]);
 
-  const xOf = new Map(rf.map((n) => [n.id, n.position.x]));
+  const positionOf = new Map(rf.map((n) => [n.id, { x: n.position.x + (n.measured?.width ?? 200) / 2, y: n.position.y + (n.measured?.height ?? 58) / 2 }]));
   // rf keeps positions of explored nodes that were removed again; only nodes still on the canvas are drawn.
   const flowNodes: EvNode[] = rf
     .filter((n) => byId.has(n.id))
@@ -292,15 +296,18 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
   const visibleIds = new Set(visibleEdges.map(edgeId));
   const flowEdges: EvEdge[] = edges.map((e) => {
     const id = edgeId(e);
-    const fx = xOf.get(e.from)!;
-    const tx = xOf.get(e.to)!;
+    const from = positionOf.get(e.from)!;
+    const to = positionOf.get(e.to)!;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const horizontal = Math.abs(dx) >= Math.abs(dy);
     return {
       id,
       source: e.from,
       target: e.to,
       type: "evidence",
-      sourceHandle: fx <= tx ? "r" : "ls",
-      targetHandle: fx < tx ? "l" : "rt",
+      sourceHandle: horizontal ? (dx >= 0 ? "r" : "ls") : (dy >= 0 ? "bs" : "ts"),
+      targetHandle: horizontal ? (dx >= 0 ? "l" : "rt") : (dy >= 0 ? "t" : "b"),
       hidden: !visibleIds.has(id),
       selected: selEdges.has(id),
       ariaLabel: edgeLabel(e),
@@ -450,7 +457,6 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
       >
         <Background gap={24} size={1} color="#ffffff14" />
         <Controls showInteractive={false} position="bottom-left" />
-        {!compact && <MiniMap pannable zoomable position="bottom-right" nodeColor={(n) => ((n.data as NodeData).focus ? "#00c758" : (n.data as NodeData).explored ? "#26262b" : "#3f3f46")} maskColor="#08080acc" />}
       </ReactFlow>
     </div>
   );
@@ -469,6 +475,11 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
         <div className="evidence-toolbar-section">
           <h3 className="evidence-toolbar-label">Entity</h3>
           <div className="evidence-toolbar-controls">
+            <div className="evidence-reset-group">
+              <button type="button" onClick={reset} className={chip(false)}>
+                <Icon name="reset" className="size-3.5" /> Atur ulang
+              </button>
+            </div>
         {origins.map((o) => (
           <button key={o} type="button" aria-pressed={!hiddenOrigins.has(o)} onClick={() => setHiddenOrigins(toggle(hiddenOrigins, o))} className={chip(!hiddenOrigins.has(o))}>
             <svg width="18" height="6" aria-hidden>
@@ -483,11 +494,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
             {KIND[k]}
           </button>
         ))}
-            <div className="evidence-reset-group">
-              <button type="button" onClick={reset} className={chip(false)}>
-                <Icon name="reset" className="size-3.5" /> Atur ulang
-              </button>
-            </div>
+
           </div>
         </div>
         <div className="evidence-toolbar-section">
@@ -561,7 +568,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
               Bukti: {title}
             </h3>
             <p className="mt-0.5 text-xs text-muted" aria-live="polite">
-              {active.size} sumber terpilih dari {evidence.length}.{picking ? " Escape untuk kembali ke jalur utama." : ""}
+              {active.size} sumber terpilih dari {evidence.length}.
             </p>
             <p className="sr-only" aria-live="polite">
               {announce}
@@ -582,7 +589,7 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
                   <button
                     type="button"
                     onClick={() => chat.ask(`Jelaskan ${one.type} ${one.label} (${one.id}) dan hubungannya dengan ${account ?? "akun ini"}.`)}
-                    className="evidence-ask-button mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 px-2.5 text-xs pointer-coarse:min-h-11"
+                    className="evidence-ask-button mt-2 inline-flex min-h-9 cursor-pointer items-center gap-1.5 px-3 text-xs pointer-coarse:min-h-11"
                   >
                     <Icon name="chat" className="size-3.5" /> Tanya AI
                   </button>
@@ -625,21 +632,19 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
                     <li key={e.id} className={`evidence-source-card rounded-md border p-2.5 text-sm ${active.has(e.id) ? "is-active" : "border-line opacity-60"}`}>
                       <p className="evidence-source-title">{e.label}</p>
                       <div className="evidence-source-actions">
-                      <button type="button" className="evidence-source-label mt-1.5" title={`1 sumber: ${e.file}:${e.row} · ${e.column}${e.date ? ` · ${e.date}` : ""}`} aria-label="1 source">
-                        Source <span>1</span><Icon name="chevron-right" className="size-3.5" />
-                      </button>
+                      <SourceLabel evidence={evidence} ids={[e.id]} title={e.label} />
                       {active.has(e.id) && chat && (
                         <button
                           type="button"
                           onClick={() => chat.ask(`Jelaskan bukti "${e.label}" (${e.file} baris ${e.row}) untuk ${account ?? "akun ini"}: apa isinya dan apa artinya bagi keputusan pembelian?`)}
-                          className="evidence-ask-button mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 px-2.5 text-xs pointer-coarse:min-h-11"
+                          className="evidence-ask-button mt-2 inline-flex min-h-9 cursor-pointer items-center gap-1.5 px-3 text-xs pointer-coarse:min-h-11"
                         >
                           <Icon name="chat" className="size-3.5" /> Tanya AI
                         </button>
                       )}
                       </div>
                       <p className="evidence-source-origin">{ORIGIN[e.origin]}</p>
-                      {e.excerpt && <blockquote className="evidence-source-excerpt line-clamp-4 text-xs text-muted">{e.excerpt}</blockquote>}
+                      {e.excerpt && <blockquote className="evidence-source-excerpt text-xs text-muted">{e.excerpt}</blockquote>}
 
                     </li>
                   ))}

@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { rupiah, SNAPSHOT, tanggal, type Discovery, type Role, type Status } from "~/server/discovery";
+import { dataset } from "~/server/dataset";
+import { rupiah, SNAPSHOT, tanggal, type Discovery, type Status } from "~/server/discovery";
 import { ChatScope } from "./chat-provider";
+import { AccountDatePicker } from "./account-date-picker";
 import { ContactPlanCard } from "./contact-plan";
 import { EvidenceGraph } from "./evidence-graph";
 import { Icon } from "./icon";
 import { InformationCard } from "./information-card";
+import { SourceLabel } from "./source-label";
 import { NextStepsCard } from "./next-steps-card";
 
 export type Tab = "overview" | "graph" | "people" | "precedents";
@@ -20,15 +23,6 @@ const STATUS: Record<Status, { label: string; mark: string }> = {
   teridentifikasi_lintas_sumber: { label: "Teridentifikasi lintas sumber", mark: "bg-accent" },
   kandidat: { label: "Kandidat, belum terbukti", mark: "border-2 border-warn" },
   belum_teridentifikasi: { label: "Belum teridentifikasi", mark: "border-2 border-dashed border-muted" },
-};
-const ROLE: Record<Role, string> = {
-  decision_maker: "Pemutus pengadaan",
-  approver: "Penandatangan",
-  champion: "Champion",
-  evaluator: "Evaluator teknis",
-  candidate: "Kandidat",
-  discovery_contact: "Kontak discovery",
-  senior: "Pejabat senior",
 };
 
 export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus: string[] }) {
@@ -61,10 +55,7 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
         <form action="/dashboard" className="account-date-form">
           <input type="hidden" name="q" value={d.account.id} />
           {tab !== "overview" && <input type="hidden" name="tab" value={tab} />}
-          <div className="account-date-field">
-            <label htmlFor="asof" className="sr-only">Tanggal acuan</label>
-            <input id="asof" name="asof" type="date" defaultValue={d.asOf} max={SNAPSHOT} />
-          </div>
+          <AccountDatePicker key={d.asOf} value={d.asOf} max={SNAPSHOT} />
           <button type="submit">Terapkan</button>
         </form>
       </div>
@@ -108,11 +99,7 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <InformationCard id="answer" title="Pemutus pengadaan" detail={tanggal(d.asOf)} focal>
-          <p className="mt-2 flex items-center gap-2 text-sm">
-            <span className={`size-3 shrink-0 rounded-[2px] ${s.mark}`} aria-hidden />
-            {s.label}
-          </p>
+        <InformationCard id="answer" title="Pemutus pengadaan" detail={<span className="answer-header-meta"><span>{tanggal(d.asOf)}</span><span className="answer-status">{d.decisionMaker.status === "teridentifikasi_lintas_sumber" ? "Lintas Sumber" : s.label}</span></span>} focal>
           <p className="mt-2 font-display text-4xl">{dm ? dm.name : "Belum teridentifikasi"}</p>
           {dm && <p className="text-muted">{dm.title}</p>}
           <p className="mt-4 max-w-prose leading-relaxed">{d.decisionMaker.why}</p>
@@ -128,26 +115,29 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
           {d.deal ? (
             <>
               <p className="mt-2 font-display text-3xl tabular-nums">{rupiah(d.deal.value)}</p>
-              <div className="deal-metadata-row">
-                <span className="next-step-assignee deal-owner" title="Pemegang deal">
-                  <span className="next-step-avatar" aria-hidden="true">{d.deal.owner.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span>
-                  <span>{d.deal.owner}</span>
-                </span>
-                <span className="decision-meta-label">{d.deal.id}</span>
-                <span className="decision-meta-label">{d.deal.stage}</span>
-                <span className="decision-meta-label">{d.deal.status}</span>
-              </div>
+              <dl className="deal-metadata-list">
+                <div><dt>Owner</dt><dd><span className="next-step-assignee deal-owner"><span className="next-step-avatar" aria-hidden>{d.deal.owner.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span><span>{d.deal.owner}</span></span></dd></div>
+                <div><dt>Deal ID</dt><dd><span className="decision-meta-label">{d.deal.id}</span></dd></div>
+                <div><dt>Stage</dt><dd><span className="decision-meta-label">{d.deal.stage}</span></dd></div>
+                <div><dt>Status</dt><dd><span className="decision-meta-label">{d.deal.status}</span></dd></div>
+              </dl>
             </>
           ) : (
             <p className="mt-2 text-muted">Belum ada deal untuk akun ini sampai {tanggal(d.asOf)}.</p>
           )}
           {d.approver && (
             <div className="mt-4 border-t border-line pt-4">
-              <h3 className="text-sm font-medium">Penandatangan / penyetuju akhir</h3>
-              <p className="mt-1">{approver ? `${approver.name}, ${approver.title}` : "Belum teridentifikasi"}</p>
-              <p className="mt-1 text-sm text-muted">
-                {STATUS[d.approver.status].label}. {d.approver.why}
-              </p>
+              <h3 className="text-sm font-medium">Penandatanganan / Penyetuju Akhir</h3>
+              <div className="approver-profile">
+                <div className="approver-person">
+                  <span className="approver-avatar" role="img" aria-label={`Avatar ${approver?.name ?? "belum teridentifikasi"}`}>
+                    {approver ? approver.name.split(" ").map((n) => n[0]).slice(0, 2).join("") : <Icon name="contacts" />}
+                  </span>
+                  <div><p className="font-semibold text-white">{approver?.name ?? "Belum teridentifikasi"}</p><p className="text-xs text-muted">{approver?.title ?? "Jabatan belum diketahui"}</p></div>
+                </div>
+                <SourceLabel evidence={d.evidence} ids={d.approver.evidence} />
+                <p className="mt-3 text-sm text-muted">{STATUS[d.approver.status].label}. {d.approver.why}</p>
+              </div>
             </div>
           )}
         </InformationCard>
@@ -172,53 +162,29 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
 }
 
 function People({ d }: { d: Discovery }) {
-  // With nobody at the account, the contact card's own empty message says what to do; the table would add nothing.
-  if (!d.people.length) return <ContactPlanCard d={d} />;
-  return (
-    <div className="space-y-6">
-      <ContactPlanCard d={d} />
-      <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-        <table className="w-full min-w-[40rem] text-left text-sm">
-          <caption className="sr-only">Peta stakeholder {d.account.name}</caption>
-          <thead className="text-xs text-muted">
-            <tr className="border-b border-line">
-              <th scope="col" className="px-4 py-2.5 font-medium">Peran</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">Nama</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">Jabatan, sejak</th>
-              <th scope="col" className="px-4 py-2.5 font-medium">Dasar</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {d.people.map((p) => (
-              <tr key={p.id} className="align-top">
-                <td className="px-4 py-3">{p.roles.map((r) => ROLE[r]).join(", ") || "Tercatat di akun"}</td>
-                <td className="px-4 py-3 font-medium">{p.name}</td>
-                <td className="px-4 py-3 text-muted">
-                  {p.title}, {tanggal(p.since)}
-                </td>
-                <td className="px-4 py-3 text-muted">{p.notes.join(" · ") || "Hanya tercatat di riwayat jabatan."}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+  return <ContactPlanCard d={d} />;
 }
 
 function Precedents({ d }: { d: Discovery }) {
+  const accounts = dataset().accounts;
   if (!d.precedents.length)
     return <p className="text-muted">Tidak ada keputusan di log yang terkait akun ini atau orang-orangnya sampai {tanggal(d.asOf)}.</p>;
   return (
-    <ul className="divide-y divide-line rounded-xl border border-line bg-panel">
+    <ul className="precedent-list">
       {d.precedents.map((p) => (
-        <li key={p.id} className="p-4">
-          <p>
-            <span className="font-mono text-sm text-muted">{p.id}</span> · {tanggal(p.date)} · {p.kind} {p.value} di {p.account}: {p.decision}
-          </p>
-          <p className="mt-1 text-muted">{p.reason}</p>
-          {p.promise && <p className="mt-1 text-sm">Janji fitur: {p.promise}</p>}
-          <p className="mt-1 text-sm text-muted">{p.link}</p>
+        <li key={p.id}>
+          <InformationCard id={`precedent-${p.id}`} title={`${p.kind.charAt(0).toUpperCase()}${p.kind.slice(1)} ${p.value}`} detail={p.id}>
+            <div className="precedent-labels">
+              <span className="precedent-badge"><Icon name="calendar" className="size-3.5" />{tanggal(p.date)}</span>
+              <span className="precedent-badge">{p.decision}</span>
+              <SourceLabel evidence={d.evidence} ids={p.evidence} title={`Preseden ${p.id}`} />
+              <Link className="precedent-badge precedent-account-chip" href={`/dashboard?q=${p.account}&asof=${d.asOf}`} title={p.account}><Icon name="building" className="size-3.5" />{accounts.find((a) => a.account_id === p.account)?.nama ?? p.account}</Link>
+            </div>
+
+            <p className="mt-3">{p.reason}</p>
+            {p.promise && <div className="precedent-promise"><h3>Janji fitur</h3><p>{p.promise}</p></div>}
+            <p className="mt-3 text-sm text-muted">{p.link}</p>
+          </InformationCard>
         </li>
       ))}
     </ul>
