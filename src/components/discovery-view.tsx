@@ -2,6 +2,9 @@ import Link from "next/link";
 import { rupiah, SNAPSHOT, tanggal, type Discovery, type Role, type Status } from "~/server/discovery";
 import { ChatScope } from "./chat-provider";
 import { EvidenceGraph } from "./evidence-graph";
+import { Icon } from "./icon";
+import { InformationCard } from "./information-card";
+import { NextStepsCard } from "./next-steps-card";
 
 export type Tab = "overview" | "graph" | "people" | "precedents";
 export const TABS: [Tab, string][] = [
@@ -26,8 +29,6 @@ const ROLE: Record<Role, string> = {
   discovery_contact: "Kontak discovery",
   senior: "Pejabat senior",
 };
-const panel = "rounded-xl border border-line bg-panel p-5";
-const h2 = "text-base font-medium";
 
 export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus: string[] }) {
   const base = `/dashboard?q=${d.account.id}&asof=${d.asOf}`;
@@ -42,43 +43,36 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
           </p>
           <h1 className="mt-1 font-display text-3xl sm:text-4xl">{d.account.name}</h1>
         </div>
-        <form action="/dashboard" className="flex items-end gap-2">
-          <input type="hidden" name="q" value={d.account.id} />
-          {tab !== "overview" && <input type="hidden" name="tab" value={tab} />}
-          <div>
-            <label htmlFor="asof" className="text-xs text-muted">
-              Tanggal acuan
-            </label>
-            <input id="asof" name="asof" type="date" defaultValue={d.asOf} max={SNAPSHOT} className="mt-1 block min-h-10 rounded-md border border-line bg-background px-3 text-sm" />
-          </div>
-          <button type="submit" className="min-h-10 cursor-pointer rounded-md border border-line px-4 text-sm transition-colors duration-150 hover:border-white/50">
-            Terapkan
-          </button>
-        </form>
       </header>
 
-      <nav aria-label="Bagian akun" className="mt-6 border-b border-line">
-        <ul className="-mb-px flex gap-1 overflow-x-auto [scrollbar-width:none]">
-          {TABS.map(([t, label]) => (
-            <li key={t}>
-              <Link
-                href={t === "overview" ? base : `${base}&tab=${t}`}
-                aria-current={tab === t ? "page" : undefined}
-                className={`flex min-h-11 items-center whitespace-nowrap border-b-2 px-3 text-sm transition-colors duration-150 ${
-                  tab === t ? "border-accent text-ink" : "border-transparent text-muted hover:text-ink"
-                }`}
-              >
-                {label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <div className="account-toolbar">
+        <nav aria-label="Bagian akun" className="account-tabs">
+          <ul>
+            {TABS.map(([t, label]) => (
+              <li key={t}>
+                <Link href={t === "overview" ? base : `${base}&tab=${t}`} aria-current={tab === t ? "page" : undefined} className={tab === t ? "is-active" : ""}>
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <form action="/dashboard" className="account-date-form">
+          <input type="hidden" name="q" value={d.account.id} />
+          {tab !== "overview" && <input type="hidden" name="tab" value={tab} />}
+          <div className="account-date-field">
+            <label htmlFor="asof" className="sr-only">Tanggal acuan</label>
+            <input id="asof" name="asof" type="date" defaultValue={d.asOf} max={SNAPSHOT} />
+          </div>
+          <button type="submit">Terapkan</button>
+        </form>
+      </div>
 
       <div className="mt-6">
         {tab === "overview" && <Overview d={d} graphHref={`${base}&tab=graph`} />}
         {tab === "graph" && (
-          <>
+          <section className="evidence-graph-frame" aria-label="Jalur bukti">
+            <h2 className="evidence-graph-frame-title"><Icon name="graph" /> Jalur bukti</h2>
             <p className="mb-3 text-sm text-muted">
               Pilih node atau garis untuk membuka record sumbernya. Seret latar untuk menggeser, gulir untuk memperbesar, <kbd className="font-mono">f</kbd> untuk
               menampilkan semua.
@@ -96,7 +90,7 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
               account={d.account.name}
               asOf={d.asOf}
             />
-          </>
+          </section>
         )}
         {tab === "people" && <People d={d} />}
         {tab === "precedents" && <Precedents d={d} />}
@@ -112,10 +106,7 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
-        <section aria-labelledby="answer" className={`${panel} shadow-bubble`}>
-          <h2 id="answer" className="text-sm text-muted">
-            Pemutus pengadaan · per {tanggal(d.asOf)}
-          </h2>
+        <InformationCard id="answer" title="Pemutus pengadaan" detail={tanggal(d.asOf)} focal>
           <p className="mt-2 flex items-center gap-2 text-sm">
             <span className={`size-3 shrink-0 rounded-[2px] ${s.mark}`} aria-hidden />
             {s.label}
@@ -123,31 +114,27 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
           <p className="mt-2 font-display text-4xl">{dm ? dm.name : "Belum teridentifikasi"}</p>
           {dm && <p className="text-muted">{dm.title}</p>}
           <p className="mt-4 max-w-prose leading-relaxed">{d.decisionMaker.why}</p>
-          {d.steps[0] && (
-            <p className="mt-4 max-w-prose border-t border-line pt-4 leading-relaxed">
-              <span className="text-sm font-medium">Langkah pertama: </span>
-              {d.steps[0].text}
-            </p>
-          )}
           <Link
             href={graphHref}
-            className="mt-5 inline-flex min-h-11 items-center rounded-md bg-accent px-5 text-sm font-medium text-black transition-opacity duration-150 hover:opacity-90"
+            className="evidence-action-button mt-5 inline-flex min-h-11 items-center rounded-md px-5 text-sm font-medium transition-opacity duration-150 hover:opacity-90"
           >
             Lihat jalur bukti
           </Link>
-        </section>
+        </InformationCard>
 
-        <section aria-labelledby="value" className={panel}>
-          <h2 id="value" className="text-sm text-muted">
-            Nilai peluang
-          </h2>
+        <InformationCard id="value" title="Nilai peluang" detail={d.deal ? "per tahun" : undefined}>
           {d.deal ? (
             <>
               <p className="mt-2 font-display text-3xl tabular-nums">{rupiah(d.deal.value)}</p>
-              <p className="text-sm text-muted">
-                per tahun · Deal {d.deal.id} · {d.deal.stage} · {d.deal.status}
-              </p>
-              <p className="mt-3 text-sm">Pemegang deal: {d.deal.owner}</p>
+              <div className="deal-metadata-row">
+                <span className="next-step-assignee deal-owner" title="Pemegang deal">
+                  <span className="next-step-avatar" aria-hidden="true">{d.deal.owner.split(" ").slice(0, 2).map((part) => part[0]).join("")}</span>
+                  <span>{d.deal.owner}</span>
+                </span>
+                <span className="decision-meta-label">{d.deal.id}</span>
+                <span className="decision-meta-label">{d.deal.stage}</span>
+                <span className="decision-meta-label">{d.deal.status}</span>
+              </div>
             </>
           ) : (
             <p className="mt-2 text-muted">Belum ada deal untuk akun ini sampai {tanggal(d.asOf)}.</p>
@@ -161,34 +148,22 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
               </p>
             </div>
           )}
-        </section>
+        </InformationCard>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section aria-labelledby="steps" className={panel}>
-          <h2 id="steps" className={h2}>
-            Langkah berikutnya
-          </h2>
-          <ol className="mt-3 list-decimal space-y-3 pl-5 leading-relaxed">
-            {d.steps.map((step) => (
-              <li key={step.text}>{step.text}</li>
-            ))}
-          </ol>
-        </section>
-        <section aria-labelledby="unknowns" className={panel}>
-          <h2 id="unknowns" className={h2}>
-            Belum diketahui
-          </h2>
+        <NextStepsCard key={`${d.account.id}-${d.asOf}`} steps={d.steps.map((step) => step.text)} owner={d.deal?.owner ?? null} />
+        <InformationCard id="unknowns" title="Belum diketahui">
           {d.unknowns.length ? (
-            <ul className="mt-3 list-disc space-y-3 pl-5 leading-relaxed">
-              {d.unknowns.map((u) => (
-                <li key={u}>{u}</li>
+            <ol className="unknown-list">
+              {d.unknowns.map((u, index) => (
+                <li key={u}><span className="sidebar-count unknown-number" aria-hidden="true">{index + 1}</span><span>{u}</span></li>
               ))}
-            </ul>
+            </ol>
           ) : (
             <p className="mt-3 text-muted">Tidak ada celah yang tercatat untuk akun ini.</p>
           )}
-        </section>
+        </InformationCard>
       </div>
     </div>
   );

@@ -3,7 +3,17 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { TRPCReactProvider } from "~/trpc/client";
 
-const glitch = localFont({ src: "./fonts/BasedashGlitch-500.woff2", weight: "500", variable: "--font-glitch" });
+const inter = localFont({
+  src: [
+    { path: "./fonts/Inter-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/Inter-Medium.ttf", weight: "500", style: "normal" },
+    { path: "./fonts/Inter-Semibold.ttf", weight: "600", style: "normal" },
+    { path: "./fonts/Inter-Bold.ttf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-inter", display: "swap",
+});
+const plexSans = localFont({ src: "./fonts/IBMPlexSans-Medium.ttf", weight: "500", variable: "--font-plex-sans", display: "swap" });
+const plexMono = localFont({ src: "./fonts/IBMPlexMono-Regular.ttf", weight: "400", variable: "--font-plex-mono", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Decision Dictionary",
@@ -12,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${glitch.variable} h-full antialiased`}>
+    <html lang="en" className={`${inter.variable} ${plexSans.variable} ${plexMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <TRPCReactProvider>{children}</TRPCReactProvider>
       </body>

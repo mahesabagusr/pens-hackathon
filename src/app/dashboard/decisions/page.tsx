@@ -11,8 +11,8 @@ export default function DecisionsPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6">
       <h1 className="font-display text-3xl sm:text-4xl">Log keputusan</h1>
-      <p className="mt-1 text-muted">Setiap diskon, pengecualian, janji fitur, dan eskalasi, dengan siapa yang meminta dan memutuskan.</p>
-      <div className="mt-6">
+      <p className="mt-1 text-sm leading-7 text-muted">Setiap diskon, pengecualian, janji fitur, dan eskalasi, dengan siapa yang meminta dan memutuskan.</p>
+      <div className="decision-log-content">
         <Suspense fallback={<p className="text-muted">Memuat log keputusan…</p>}>
           <Entries />
         </Suspense>
