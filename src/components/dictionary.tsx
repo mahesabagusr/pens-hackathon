@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Entry } from "~/server/landing";
 import { AskButton } from "./chat";
+import { Icon } from "./icon";
 
 const KINDS = [
   { value: "", label: "Semua" },
@@ -11,8 +12,9 @@ const KINDS = [
   { value: "janji_fitur", label: "Janji fitur" },
   { value: "eskalasi", label: "Eskalasi" },
 ];
-const NOUN: Record<string, string> = { diskon: "diskon", pengecualian: "pengecualian", janji_fitur: "janji fitur", eskalasi: "eskalasi" };
-const DOT: Record<string, string> = { Disetujui: "bg-ok", Ditolak: "bg-danger", Menunggu: "bg-warn" };
+const NOUN: Record<string, string> = { diskon: "Diskon", pengecualian: "Pengecualian", janji_fitur: "Janji fitur", eskalasi: "Eskalasi" };
+const STATUS: Record<string, string> = { Disetujui: "approved", Ditolak: "rejected", Menunggu: "pending" };
+const initials = (name: string) => name.split(",")[0].split(" ").slice(0, 2).map((part) => part[0]).join("");
 const PREVIEW = 8;
 
 const when = (iso: string) =>
@@ -25,50 +27,61 @@ export function Dictionary({ entries }: { entries: Entry[] }) {
   const visible = all ? shown : shown.slice(0, PREVIEW);
 
   return (
-    <div>
-      <div role="group" aria-label="Saring menurut jenis keputusan" className="flex flex-wrap gap-2">
+    <div className="decision-dictionary">
+      <div role="group" aria-label="Saring menurut jenis keputusan" className="account-tabs decision-filters">
         {KINDS.map((k) => (
           <button
             key={k.value}
             type="button"
             aria-pressed={kind === k.value}
             onClick={() => setKind(k.value)}
-            className={`min-h-11 cursor-pointer rounded-md border px-4 text-sm transition-colors duration-150 ${
-              kind === k.value ? "border-accent bg-accent font-medium text-black" : "border-line text-muted hover:border-white/50 hover:text-ink"
-            }`}
+            className={kind === k.value ? "is-active" : ""}
           >
-            {k.label}
+            {k.label}<span className="decision-filter-count">{entries.filter((entry) => !k.value || entry.tipe === k.value).length}</span>
           </button>
         ))}
       </div>
 
-      <ol className="mt-6 divide-y divide-line border-y border-line">
+      <ol className="decision-card-list">
         {visible.map((e) => (
-          <li key={e.id} className="py-5">
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <h3 className="font-display text-2xl">
-                {e.headword}
-                <span className="ml-2 font-sans text-base italic text-muted">{NOUN[e.tipe]}</span>
-              </h3>
-              <p className="flex items-center gap-2 text-sm">
-                <span className={`size-2 rounded-full ${DOT[e.keputusan]}`} aria-hidden />
-                {e.keputusan}
-              </p>
+          <li key={e.id} className="information-card decision-card">
+            <header className="information-card-header decision-card-header">
+              <h3>{e.headword}</h3>
+              <div className="decision-card-badges">
+                <span className="decision-kind-chip">{NOUN[e.tipe] ?? e.tipe}</span>
+                <span className={`decision-status-chip ${STATUS[e.keputusan] ?? "pending"}`}>
+                  <span aria-hidden="true" />{e.keputusan}
+                </span>
+              </div>
+            </header>
+            <div className="information-card-body">
+              <p className="max-w-prose">{e.alasan}</p>
+              {e.statusJanji && <p className="mt-2 text-sm text-muted">Status janji: {e.statusJanji}</p>}
+              <footer className="decision-card-footer">
+                <div className="decision-metadata">
+                  <span className="decision-meta-label"><Icon name="book" />{e.id}</span>
+                  <span className="decision-meta-label"><Icon name="calendar" />{when(e.tanggal)}</span>
+                  <span className="decision-meta-label"><Icon name="building" />{e.akun}</span>
+                  <span className="decision-meta-label decision-person" title={`Diminta oleh ${e.diminta}`}>
+                    <span className="decision-person-avatar" aria-hidden="true">{initials(e.diminta)}</span><span>{e.diminta}</span>
+                  </span>
+                  <span className="decision-meta-label decision-person" title={`Diputuskan oleh ${e.diputuskan}`}>
+                    <span className="decision-person-avatar" aria-hidden="true">{initials(e.diputuskan)}</span><span>{e.diputuskan.split(",")[0]}</span>
+                  </span>
+                </div>
+                <div className="decision-card-action">
+                <AskButton
+                  question={`Ceritakan keputusan ${e.id}: siapa yang terlibat, kenapa diambil, dan apa yang terjadi sesudahnya.`}
+                  className="decision-ask-button"
+                >
+                  Tanya AI <Icon name="chevron-right" />
+                </AskButton>
+                </div>
+              </footer>
             </div>
-            <p className="mt-2 max-w-prose">{e.alasan}</p>
-            {e.statusJanji && <p className="mt-1 text-sm">Status janji: {e.statusJanji}</p>}
-            <p className="mt-2 text-sm text-muted">
-              {e.id} · {when(e.tanggal)} · {e.akun} · diminta {e.diminta} · diputuskan {e.diputuskan}
-            </p>
-            <AskButton
-              question={`Ceritakan keputusan ${e.id}: siapa yang terlibat, kenapa diambil, dan apa yang terjadi sesudahnya.`}
-              className="mt-2 min-h-11 cursor-pointer text-sm text-accent underline-offset-4 hover:underline"
-            >
-              Tanya chat tentang {e.id}
-            </AskButton>
           </li>
         ))}
-        {visible.length === 0 && <li className="py-5 text-muted">Tidak ada keputusan jenis ini di log.</li>}
+        {visible.length === 0 && <li className="information-card p-5 text-muted">Tidak ada keputusan jenis ini di log.</li>}
       </ol>
 
       {shown.length > PREVIEW && (

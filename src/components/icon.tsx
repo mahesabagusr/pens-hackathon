@@ -1,5 +1,14 @@
 // One stroke icon set (24px grid, 1.75 stroke, round caps) so every glyph in the dashboard matches.
 const PATHS = {
+  "more-vertical": <><circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+  "chevron-right": <path d="m9 5 7 7-7 7" />,
+  contacts: <><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="12" cy="9" r="2.5" /><path d="M7 17a5 5 0 0 1 10 0" /></>,
+  mail: <><path d="m3 8 9-6 9 6v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /><path d="m3 8 9 6 9-6" /></>,
+  usage: <><rect x="3" y="10" width="6" height="11" rx="1" /><rect x="9" y="3" width="6" height="18" rx="1" /><rect x="15" y="13" width="6" height="8" rx="1" /></>,
+  ticket: <><path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4Z" /><path d="M15 5v3m0 3v2m0 3v3" /></>,
+  wallet: <><rect x="3" y="5" width="17" height="15" rx="2" /><path d="M3 8V5a2 2 0 0 1 2-2h12" /><rect x="16" y="10" width="6" height="6" rx="2" /><path d="M19 13h.01" /></>,
+  building: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 7h.01M15 7h.01M9 11h.01M15 11h.01M10 21v-6h4v6" /></>,
   compass: (
     <>
       <circle cx="12" cy="12" r="9" />

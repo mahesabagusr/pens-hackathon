@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { AppSidebar, type SidebarAccount, type SidebarUser } from "./app-sidebar";
 import { Chat } from "./chat";
 import { ChatProvider, useChat } from "./chat-provider";
 import { Icon } from "./icon";
-import { Logo } from "./logo";
+import { ProspectPreviewTabs } from "./prospect-preview-tabs";
 
 const COLLAPSED = "decidely.sidebar-collapsed";
 
@@ -78,12 +77,12 @@ function Frame({ user, accounts, children }: Props) {
         collapsed={collapsed && !menu}
         onCollapse={collapse}
         onNavigate={() => setMenu(false)}
-        className={`${menu ? "fixed inset-y-0 left-0 z-40 flex w-72" : "hidden"} lg:static lg:z-auto lg:flex ${collapsed ? "lg:w-16" : "lg:w-60"} shrink-0`}
+        className={`${menu ? "fixed inset-y-0 left-0 z-40 flex w-72" : "hidden"} lg:static lg:z-auto lg:flex ${collapsed ? "lg:w-16" : "lg:w-72"} shrink-0`}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Holds only the menu and chat buttons, so it is gone when neither is needed (lg sidebar, docked xl chat). */}
-        <header className={`flex h-12 shrink-0 items-center gap-2 border-b border-line px-3 ${chat.docked ? "xl:hidden" : ""}`}>
+        {/* Preview tabs scroll beneath the fixed chat control. */}
+        <header className="dashboard-preview-header">
           <button
             ref={menuButton}
             type="button"
@@ -95,21 +94,21 @@ function Frame({ user, accounts, children }: Props) {
           >
             <Icon name="menu" />
           </button>
-          <Link href="/dashboard" className="flex min-h-10 items-center lg:hidden">
-            <Logo size="sm" />
-          </Link>
+          <Suspense fallback={null}><ProspectPreviewTabs accounts={accounts} /></Suspense>
+          <div className={`dashboard-chat-overlay ${chat.docked ? "xl:hidden" : ""}`}>
           <button
             ref={chatButton}
             type="button"
             onClick={chat.toggle}
             aria-controls="chat"
-            className={`ml-auto flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-sm transition-colors duration-150 hover:border-white/50 pointer-coarse:min-h-11 ${
+            className={`dashboard-chat-button flex min-h-9 cursor-pointer items-center gap-2 rounded-md border border-line px-3 text-sm transition-colors duration-150 hover:border-white/50 pointer-coarse:min-h-11 ${
               chat.docked ? "xl:hidden" : ""
             }`}
           >
             <Icon name="chat" className="size-4" />
-            Chat
+            Tanya AI
           </button>
+          </div>
         </header>
         <main id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-y-auto outline-none">
           {children}
