@@ -18,6 +18,8 @@
   --color-ok: #2fa86b;
   --color-warn: #f59e0b;
   --color-danger: #e8792f;
+  /* Bubble: faint white rim, soft white halo, and a lit top edge. Only on the focal card of a screen. */
+  --shadow-bubble: 0 0 0 1px #ffffff14, 0 0 40px -8px #ffffff2e, inset 0 1px 0 #ffffff26;
   --font-display: var(--font-glitch), system-ui, sans-serif;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -38,7 +40,7 @@ html {
   outline-offset: 2px;
 }
 
-/* Fallback for hash links before hydration; in-page links are eased by Motion (motion-ui.tsx). */
+/* Fallback for hash links before hydration; in-page links are eased by Motion (src/components/motion.tsx). */
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;

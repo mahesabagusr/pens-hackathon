@@ -1,24 +1,19 @@
-// Design Read: product landing for sales and RevOps leaders, basedash direction in dark
-// (#08080a page, #131316 panels, #00c758 accent, Glitch display), dial ENERGY 2 / RHYTHM 3 / MOTION 2.
-// Static on purpose: no chat, no database. The sample is decision D-2025-11 from the synthetic dataset in data/.
-
-import Image from "next/image";
-import { Reveal, ScrollLink } from "./motion-ui";
+import { Reveal, ScrollLink } from "~/components/motion";
 
 const note = "text-sm text-muted";
 const mono = "font-mono text-[13px] leading-6";
 
 const links: [string, string, string][] = [
-  ["TENTANG", "Kopi Lintas Nusantara", "C01"],
-  ["DIDASARKAN_PADA", "Deal DL-008", "renewal"],
-  ["BERBUKTI", "Email I0061", "28 Nov 2025"],
-  ["MENJANJIKAN", "Integrasi akuntansi", "FEAT-07"],
+  ["Tentang", "Kopi Lintas Nusantara", "C01"],
+  ["Didasarkan Pada", "Deal DL-008", "renewal"],
+  ["Berbukti", "Email I0061", "28 Nov 2025"],
+  ["Menjanjikan", "Integrasi akuntansi", "FEAT-07"],
 ];
 
 function Step({ rel, title, children }: { rel: string; title: string; children: React.ReactNode }) {
   return (
     <li className="relative border-l border-line pb-5 pl-6 last:border-transparent last:pb-0">
-      <span className="absolute -left-[5px] top-2 size-2.5 rounded-[2px] bg-accent" aria-hidden />
+      <span className="absolute -left-1.25 top-2 size-2.5 rounded-xs bg-accent" aria-hidden />
       <Reveal>
         <p className={`${mono} text-muted`}>{rel}</p>
         <h3 className="font-display text-2xl">{title}</h3>
@@ -56,7 +51,7 @@ export default function Home() {
           </Reveal>
 
           <Reveal delay={0.12}>
-            <div className="overflow-hidden rounded-[20px] border border-line bg-panel shadow-[0_1px_2px_#11111114]">
+            <div className="overflow-hidden rounded-[20px] border border-line bg-panel shadow-bubble">
               <article className="p-5">
                 <p className={note}>Dictionary entry · D-2025-11</p>
                 <h2 className="mt-1 font-display text-4xl">
@@ -64,7 +59,7 @@ export default function Home() {
                   <span className="ml-3 font-sans text-lg italic text-muted">discount</span>
                 </h2>
                 <p className="mt-2 flex items-center gap-2 text-sm">
-                  <span className="size-2 rounded-[2px] bg-ok" aria-hidden />
+                  <span className="size-2 rounded-xs bg-ok" aria-hidden />
                   Disetujui, 28 Nov 2025
                 </p>
                 <p className="mt-3 max-w-prose">
@@ -86,9 +81,6 @@ export default function Home() {
                 <p className="mt-3 text-sm text-muted">Promise status: Belum ditepati</p>
               </aside>
             </div>
-            <p className={`mt-2 ${note}`}>
-              Sample from the synthetic dataset for PT KasirNusa Teknologi. Every company, person and figure is fictional.
-            </p>
           </Reveal>
         </section>
 
@@ -182,19 +174,19 @@ export default function Home() {
                 </p>
                 <p>28 Nov 2025. Asked by Sari Puspita. Decided by Andi Wiratama.</p>
               </Step>
-              <Step rel="TENTANG" title="Kopi Lintas Nusantara (C01)">
+              <Step rel="Tentang" title="Kopi Lintas Nusantara (C01)">
                 <p>Enterprise plan, 42 outlets.</p>
               </Step>
-              <Step rel="DIDASARKAN_PADA" title="Deal DL-008">
+              <Step rel="Didasarkan Pada" title="Deal DL-008">
                 <p>A renewal worth Rp 149.940.000 a year, won.</p>
               </Step>
-              <Step rel="BERBUKTI" title="Email I0061">
+              <Step rel="Berbukti" title="Email I0061">
                 <p>
                   <strong>Re: Approval diskon 15% Kopi Lintas</strong>
                 </p>
                 <p>28 Nov 2025, Andi Wiratama to Sari Puspita.</p>
               </Step>
-              <Step rel="MENJANJIKAN" title="Integrasi akuntansi (Jurnal & Accurate), FEAT-07">
+              <Step rel="Menjanjikan" title="Integrasi akuntansi (Jurnal & Accurate), FEAT-07">
                 <p>
                   Promise status: <strong>Belum ditepati</strong>. Roadmap says in development, target moved from 2026-Q3 to
                   not set.
@@ -204,21 +196,6 @@ export default function Home() {
           </Reveal>
         </section>
       </main>
-
-      <footer className="border-t border-line">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-start justify-between gap-x-8 gap-y-2 px-4 py-6">
-          <div>
-            <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" className="h-7 w-auto" />
-            <p className={`mt-1 max-w-prose ${note}`}>
-              Built on the synthetic dataset for PT KasirNusa Teknologi from the Context Graphs hackathon. Every company,
-              person and figure is fictional.
-            </p>
-          </div>
-          <ScrollLink href="#top" className="flex min-h-11 items-center text-sm underline underline-offset-4 hover:no-underline">
-            Back to top
-          </ScrollLink>
-        </div>
-      </footer>
     </>
   );
 }

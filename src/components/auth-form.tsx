@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { login, register, type AuthState } from "./actions";
+import { login, register, type AuthState } from "~/server/actions/auth";
 
 const input =
   "mt-1 block min-h-12 w-full rounded-md border border-line bg-background px-3 text-ink placeholder:text-muted aria-[invalid=true]:border-danger";

@@ -1,5 +1,6 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { db } from "./db";
 
 const COOKIE = "session";
@@ -44,6 +45,7 @@ export async function endSession() {
 }
 
 export async function currentUser() {
+  await connection(); // request-time only: the expiry check reads the clock, which Cache Components forbids during prerender
   const value = (await cookies()).get(COOKIE)?.value;
   const [id, exp, mac] = value?.split(".") ?? [];
   if (!id || !exp || !mac || Number(exp) < Date.now() / 1000) return null;

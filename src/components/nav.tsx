@@ -1,63 +1,25 @@
 "use client";
 
-import { AnimatePresence, animate, motion, useReducedMotion, useScroll, useSpring } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { logout } from "./auth/actions";
+import { logout } from "~/server/actions/auth";
+import { ScrollLink } from "./motion";
 
-const HEADER = 80; // sticky header plus breathing room, same as scroll-padding-top in globals.css
 const SECTIONS: [string, string][] = [
   ["problem", "Problem"],
   ["entry", "Entry"],
   ["trace", "Trace"],
 ];
 
-let running: ReturnType<typeof animate> | undefined;
-
-// Eased scroll to an anchor. The user can interrupt it with the wheel, touch or keyboard.
-function scrollToId(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const from = window.scrollY;
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  const to = id === "top" ? 0 : Math.min(Math.max(el.getBoundingClientRect().top + from - HEADER, 0), max);
-  running?.stop();
-  const stop = () => running?.stop();
-  for (const ev of ["wheel", "touchstart", "keydown"]) window.addEventListener(ev, stop, { once: true, passive: true });
-  running = animate(from, to, {
-    duration: Math.min(0.9, Math.max(0.45, Math.abs(to - from) / 2500)),
-    ease: [0.22, 1, 0.36, 1],
-    onUpdate: (v) => window.scrollTo({ top: v, behavior: "instant" }),
-    onComplete: () => history.replaceState(null, "", `#${id}`),
-  });
-}
-
-// href is "/#section". On the home page it eases to the section; elsewhere it navigates home and the browser jumps there.
-export function ScrollLink({ href, children, onClick, ...rest }: { href: string } & React.ComponentProps<"a">) {
-  const reduced = useReducedMotion();
-  const pathname = usePathname();
-  return (
-    <Link
-      {...rest}
-      href={href}
-      onClick={(e) => {
-        onClick?.(e);
-        if (pathname !== "/" || reduced || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-        e.preventDefault();
-        scrollToId(href.split("#")[1] ?? "top");
-      }}
-    >
-      {children}
-    </Link>
-  );
-}
-
 type NavUser = { name: string | null; email: string };
 
 const ghost =
   "flex min-h-10 items-center justify-center rounded-md border border-line px-4 text-sm font-medium transition-colors duration-150 hover:border-ink";
+const solid =
+  "flex min-h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-medium text-background transition-opacity duration-150 hover:opacity-90";
 const plain = "flex min-h-10 items-center px-3 text-sm text-muted transition-colors duration-150 hover:text-ink";
 
 function AuthLinks({ user, onNavigate, stacked }: { user?: NavUser | null; onNavigate?: () => void; stacked?: boolean }) {
@@ -82,7 +44,7 @@ function AuthLinks({ user, onNavigate, stacked }: { user?: NavUser | null; onNav
       <Link href="/login" onClick={onNavigate} className={stacked ? ghost : plain}>
         Log in
       </Link>
-      <Link href="/register" onClick={onNavigate} className={ghost}>
+      <Link href="/register" onClick={onNavigate} className={solid}>
         Register
       </Link>
     </div>
@@ -128,35 +90,32 @@ export function Nav({ user }: { user?: NavUser | null }) {
 
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-background">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-2">
-        <ScrollLink href="/#top" className="flex min-h-11 items-center">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-4 px-4 py-2 md:grid-cols-[1fr_auto_1fr]">
+        <ScrollLink href="/#top" className="flex min-h-11 items-center justify-self-start">
           <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" priority className="h-7 w-auto" />
         </ScrollLink>
 
-        <div className="hidden items-center gap-4 md:flex">
-          <nav aria-label="Sections" className="flex gap-1 text-sm">
-            {SECTIONS.map(([id, label]) => (
-              <ScrollLink
-                key={id}
-                href={`/#${id}`}
-                aria-current={active === id ? "location" : undefined}
-                className={`relative flex min-h-11 items-center px-3 transition-colors duration-150 hover:text-ink ${
-                  active === id ? "text-ink" : "text-muted"
-                }`}
-              >
-                {label}
-                {active === id && (
-                  <motion.span
-                    layoutId="nav-active"
-                    className="absolute inset-x-3 bottom-1 h-0.5 bg-accent"
-                    transition={spring}
-                    aria-hidden
-                  />
-                )}
-              </ScrollLink>
-            ))}
-          </nav>
-          <span className="h-6 w-px bg-line" aria-hidden />
+        <nav aria-label="Sections" className="hidden items-center gap-1 text-sm md:flex">
+          {SECTIONS.map(([id, label]) => (
+            <ScrollLink
+              key={id}
+              href={`/#${id}`}
+              aria-current={active === id ? "location" : undefined}
+              className={`relative flex min-h-11 items-center rounded-md px-4 transition-colors duration-150 hover:text-ink ${
+                active === id ? "text-ink" : "text-muted"
+              }`}
+            >
+              {active === id && (
+                <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md bg-line" transition={spring} aria-hidden>
+                  <span className="absolute inset-x-4 bottom-1 h-0.5 bg-accent" />
+                </motion.span>
+              )}
+              <span className="relative">{label}</span>
+            </ScrollLink>
+          ))}
+        </nav>
+
+        <div className="hidden justify-self-end md:block">
           <AuthLinks user={user} />
         </div>
 
@@ -166,7 +125,7 @@ export function Nav({ user }: { user?: NavUser | null }) {
           aria-expanded={open}
           aria-controls="mobile-menu"
           aria-label={open ? "Close menu" : "Open menu"}
-          className="flex size-11 items-center justify-center rounded-md border border-line hover:border-ink md:hidden"
+          className="flex size-11 items-center justify-center justify-self-end rounded-md border border-line hover:border-ink md:hidden"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             {open ? <path d="M4 4l12 12M16 4L4 16" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
@@ -214,19 +173,3 @@ export function Nav({ user }: { user?: NavUser | null }) {
   );
 }
 
-// Fades and lifts a block in once it scrolls into view. Plain div when the user prefers reduced motion.
-export function Reveal({ children, className, delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
-  return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "0px 0px -10% 0px" }}
-      transition={{ duration: 0.5, ease: "easeOut", delay }}
-    >
-      {children}
-    </motion.div>
-  );
-}

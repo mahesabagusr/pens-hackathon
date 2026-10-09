@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { db } from "~/server/db";
 import { graph } from "~/server/graph";
-import { baseProcedure, createTRPCRouter } from "../init";
+import { baseProcedure, createTRPCRouter } from "~/trpc/init";
 
 // Postgres (Prisma) owns user records; Neo4j holds only the relationship graph,
 // keyed by the Postgres id. Graph nodes are created lazily via MERGE on follow.

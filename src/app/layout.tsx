@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { SessionNav } from "./session-nav";
+import { SessionNav } from "~/components/session-nav";
+import { SiteFooter } from "~/components/site-footer";
 import { TRPCReactProvider } from "~/trpc/client";
 
 const glitch = localFont({ src: "./fonts/BasedashGlitch-500.woff2", weight: "500", variable: "--font-glitch" });
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <SessionNav />
         <TRPCReactProvider>{children}</TRPCReactProvider>
+        <SiteFooter />
       </body>
     </html>
   );

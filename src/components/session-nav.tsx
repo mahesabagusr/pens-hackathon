@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { currentUser } from "~/server/auth";
-import { Nav } from "./motion-ui";
+import { Nav } from "./nav";
 
 async function Session() {
   // A down database should not take the whole site with it: show the guest navbar.
