@@ -10,17 +10,22 @@
     "postinstall": "prisma generate",
     "db:up": "docker compose up -d postgres neo4j",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:load": "tsx scripts/load-postgres.mts",
+    "graph:load": "tsx scripts/load-neo4j.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@tanstack/react-query": "^5.104.1",
     "@trpc/client": "^11.19.0",
     "@trpc/server": "^11.19.0",
     "@trpc/tanstack-react-query": "^11.19.0",
+    "csv-parse": "^7.0.3",
     "neo4j-driver": "^6.2.0",
     "next": "16.4.0",
+    "playwright": "^1.64.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "^4.6.5"
@@ -35,6 +40,7 @@
     "eslint-config-next": "16.4.0",
     "prisma": "^7.10.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

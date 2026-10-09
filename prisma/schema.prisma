@@ -14,3 +14,254 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// KasirNusa dataset (data/). Column names match the CSV headers on purpose, so the loader needs no mapping.
+
+model Employee {
+  employee_id String @id
+  nama        String
+  jabatan     String
+  email       String @unique
+
+  accounts  Account[]
+  deals     Deal[]
+  requested Decision[] @relation("requested")
+  decided   Decision[] @relation("decided")
+}
+
+model Release {
+  versi         String   @id
+  tanggal_rilis DateTime @db.Date
+
+  bugs    Bug[]
+  tickets SupportTicket[]
+  usage   ProductUsageDaily[]
+}
+
+model Feature {
+  feature_id     String  @id
+  nama           String
+  status         String
+  target_awal    String?
+  target_terkini String?
+  catatan        String?
+
+  bugs      Bug[]
+  usage     FeatureUsageMonthly[]
+  decisions Decision[]
+}
+
+model Account {
+  account_id             String  @id
+  nama                   String
+  tipe                   String // pelanggan | prospek
+  industri               String
+  kota                   String
+  paket                  String?
+  jumlah_outlet          Int
+  account_owner_id       String
+  champion_contact_id    String? // no FK: Account <-> Contact is circular, and the CRM value can be stale
+  nps_terakhir           Int?
+  health_score_dashboard String?
+
+  owner        Employee              @relation(fields: [account_owner_id], references: [employee_id])
+  contacts     Contact[]
+  history      EmploymentHistory[]
+  deals        Deal[]
+  outlets      Outlet[]
+  contracts    Contract[]
+  decisions    Decision[]
+  interactions Interaction[]
+  tickets      SupportTicket[]
+  usage        ProductUsageDaily[]
+  featureUsage FeatureUsageMonthly[]
+}
+
+model Contact {
+  contact_id          String @id
+  nama                String
+  email               String // current office email only; interactions may use older ones
+  account_id_saat_ini String
+  jabatan_saat_ini    String
+
+  account Account             @relation(fields: [account_id_saat_ini], references: [account_id])
+  history EmploymentHistory[]
+  tickets SupportTicket[]
+}
+
+model EmploymentHistory {
+  id         Int       @id @default(autoincrement())
+  contact_id String
+  account_id String? // null = an organisation that is not a KasirNusa account (see organisasi)
+  organisasi String
+  jabatan    String
+  mulai      DateTime  @db.Date
+  selesai    DateTime? @db.Date // null = still in the role
+
+  contact Contact  @relation(fields: [contact_id], references: [contact_id])
+  account Account? @relation(fields: [account_id], references: [account_id])
+
+  @@index([contact_id])
+  @@index([account_id])
+}
+
+model Deal {
+  deal_id       String   @id
+  account_id    String
+  tipe          String // baru | renewal | ekspansi
+  stage         String
+  stage_sejak   DateTime @db.Date
+  dibuat        DateTime @db.Date
+  owner_id      String
+  outlet        Int
+  nilai_tahunan Int
+  status        String
+  alasan_kalah  String?
+  kompetitor    String?
+
+  account   Account    @relation(fields: [account_id], references: [account_id])
+  owner     Employee   @relation(fields: [owner_id], references: [employee_id])
+  decisions Decision[]
+}
+
+model Outlet {
+  outlet_id          String  @id
+  account_id         String
+  kota               String
+  mode_offline_aktif Boolean
+
+  account Account             @relation(fields: [account_id], references: [account_id])
+  tickets SupportTicket[]
+  usage   ProductUsageDaily[]
+
+  @@index([account_id])
+}
+
+model Interaction {
+  interaction_id String   @id
+  tanggal        DateTime @db.Date
+  tipe           String // email | email_internal | catatan_meeting
+  account_id     String?
+  dari           String
+  ke             String?
+  peserta        String[] // meeting only: contact_id / employee_id
+  subjek         String
+  isi            String
+  membalas_id    String?
+
+  account   Account?      @relation(fields: [account_id], references: [account_id])
+  membalas  Interaction?  @relation("reply", fields: [membalas_id], references: [interaction_id])
+  balasan   Interaction[] @relation("reply")
+  decisions Decision[]
+
+  @@index([account_id])
+}
+
+model Bug {
+  bug_id          String    @id
+  judul           String
+  versi_terdampak String
+  status          String
+  dibuat          DateTime  @db.Date
+  selesai         DateTime? @db.Date
+  fitur_terkait   String
+
+  release Release         @relation(fields: [versi_terdampak], references: [versi])
+  feature Feature         @relation(fields: [fitur_terkait], references: [feature_id])
+  tickets SupportTicket[]
+}
+
+model SupportTicket {
+  ticket_id          String    @id
+  dibuat             DateTime  @db.Date
+  account_id         String
+  outlet_id          String?
+  pelapor_contact_id String?
+  kategori           String
+  prioritas          String
+  status             String
+  versi_aplikasi     String
+  judul              String
+  deskripsi          String
+  bug_id             String?
+  diselesaikan       DateTime? @db.Date
+
+  account Account  @relation(fields: [account_id], references: [account_id])
+  outlet  Outlet?  @relation(fields: [outlet_id], references: [outlet_id])
+  pelapor Contact? @relation(fields: [pelapor_contact_id], references: [contact_id])
+  bug     Bug?     @relation(fields: [bug_id], references: [bug_id])
+  release Release  @relation(fields: [versi_aplikasi], references: [versi])
+
+  @@index([account_id])
+  @@index([bug_id])
+}
+
+model Decision {
+  decision_id          String   @id
+  tanggal              DateTime @db.Date
+  tipe                 String // diskon | pengecualian | janji_fitur | eskalasi
+  account_id           String
+  deal_id              String?
+  diminta_oleh         String
+  diputuskan_oleh      String
+  keputusan            String // Disetujui | Ditolak | Menunggu
+  nilai                String? // free-form: "12%", "Tempo bayar 45 hari", ...
+  alasan               String
+  bukti_interaction_id String?
+  fitur_dijanjikan     String?
+  status_janji         String?
+
+  account   Account      @relation(fields: [account_id], references: [account_id])
+  deal      Deal?        @relation(fields: [deal_id], references: [deal_id])
+  requester Employee     @relation("requested", fields: [diminta_oleh], references: [employee_id])
+  decider   Employee     @relation("decided", fields: [diputuskan_oleh], references: [employee_id])
+  evidence  Interaction? @relation(fields: [bukti_interaction_id], references: [interaction_id])
+  feature   Feature?     @relation(fields: [fitur_dijanjikan], references: [feature_id])
+  contracts Contract[]
+}
+
+model Contract {
+  contract_id               String   @id
+  account_id                String
+  paket                     String
+  outlet_kontrak            Int
+  batas_outlet_paket        Int? // null = tanpa batas (Enterprise)
+  mulai                     DateTime @db.Date
+  tanggal_renewal           DateTime @db.Date
+  harga_per_outlet_bulan    Int
+  diskon_pct                Int
+  nilai_tahunan             Int
+  keterlambatan_bayar_12bln Int
+  decision_id               String?
+
+  account  Account   @relation(fields: [account_id], references: [account_id])
+  decision Decision? @relation(fields: [decision_id], references: [decision_id])
+}
+
+model FeatureUsageMonthly {
+  bulan          String // "2025-10"
+  account_id     String
+  feature_id     String
+  pengguna_aktif Int
+
+  account Account @relation(fields: [account_id], references: [account_id])
+  feature Feature @relation(fields: [feature_id], references: [feature_id])
+
+  @@id([bulan, account_id, feature_id])
+}
+
+model ProductUsageDaily {
+  tanggal                      DateTime @db.Date
+  outlet_id                    String
+  account_id                   String
+  versi_aplikasi               String
+  jumlah_transaksi             Int
+  transaksi_offline_tersinkron Int? // null = outlet does not use offline mode
+
+  outlet  Outlet  @relation(fields: [outlet_id], references: [outlet_id])
+  account Account @relation(fields: [account_id], references: [account_id])
+  release Release @relation(fields: [versi_aplikasi], references: [versi])
+
+  @@id([tanggal, outlet_id])
+  @@index([account_id])
+}

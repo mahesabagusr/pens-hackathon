@@ -1,23 +1,40 @@
 @import "tailwindcss";
 
+/* Tokens from design/basedash. Light only: the supplied direction has no dark theme. */
 :root {
+  color-scheme: light;
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-ink: #000000;
+  --color-night: #131316;
+  --color-panel: #fafafa;
+  --color-line: #e8e8e8;
+  --color-muted: #6b6b76;
+  --color-dim: #a1a1aa;
+  --color-accent: #00c758;
+  --color-ok: #23764b;
+  --color-warn: #f59e0b;
+  --color-danger: #e8792f;
+  --font-display: var(--font-glitch), system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Black ring on white, white ring on the dark panel: the green accent is under 3:1 on white. */
+:focus-visible {
+  outline: 2px solid #131316;
+  outline-offset: 2px;
+}
+.on-night :focus-visible {
+  outline-color: #ffffff;
 }
