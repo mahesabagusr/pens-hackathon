@@ -1,0 +1,4 @@
+[
+  { "interaction_id": "I0343", "source": "AT-01, AT-02", "dm_claim": true, "dm_who": "K017", "technical_who": "K052" },
+  { "interaction_id": "I0335", "source": "AT-06", "sign_claim": true, "sign_who": "K028" }
+]

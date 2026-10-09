@@ -63,7 +63,9 @@ function Frame({ user, accounts, children }: Props) {
   }, [menu, drawer, closeMenu, closeChat]);
 
   return (
-    <div lang="id" className="flex h-dvh overflow-hidden bg-background">
+    // `relative` on the shell and on <main>: absolutely positioned descendants (sr-only text) otherwise anchor to the
+    // document, sit at their static position below the fold and make the whole page scroll past the app.
+    <div lang="id" className="relative flex h-dvh overflow-hidden bg-background">
       <a href="#main" className="sr-only z-50 rounded-md bg-ink px-4 py-2 text-background focus:not-sr-only focus:fixed focus:left-2 focus:top-2">
         Lewati ke konten
       </a>
@@ -108,7 +110,7 @@ function Frame({ user, accounts, children }: Props) {
           </button>
           </div>
         </header>
-        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
+        <main id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-y-auto outline-none">
           {children}
         </main>
       </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { rupiah, SNAPSHOT, tanggal, type Discovery, type Role, type Status } from "~/server/discovery";
 import { ChatScope } from "./chat-provider";
+import { ContactPlanCard } from "./contact-plan";
 import { EvidenceGraph } from "./evidence-graph";
 import { Icon } from "./icon";
 import { InformationCard } from "./information-card";
@@ -99,6 +100,7 @@ export function DiscoveryView({ d, tab, focus }: { d: Discovery; tab: Tab; focus
   );
 }
 
+// Which reader turned this account's emails and meeting notes into claims (PRD_JEV.md §6).
 function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
   const dm = d.people.find((p) => p.id === d.decisionMaker.personId);
   const approver = d.approver?.personId ? d.people.find((p) => p.id === d.approver!.personId) : null;
@@ -170,32 +172,36 @@ function Overview({ d, graphHref }: { d: Discovery; graphHref: string }) {
 }
 
 function People({ d }: { d: Discovery }) {
-  if (!d.people.length) return <p className="text-muted">Tidak ada kontak yang bekerja di akun ini pada {tanggal(d.asOf)}. Coba tanggal acuan lain.</p>;
+  // With nobody at the account, the contact card's own empty message says what to do; the table would add nothing.
+  if (!d.people.length) return <ContactPlanCard d={d} />;
   return (
-    <div className="overflow-x-auto rounded-xl border border-line bg-panel">
-      <table className="w-full min-w-[40rem] text-left text-sm">
-        <caption className="sr-only">Peta stakeholder {d.account.name}</caption>
-        <thead className="text-xs text-muted">
-          <tr className="border-b border-line">
-            <th scope="col" className="px-4 py-2.5 font-medium">Peran</th>
-            <th scope="col" className="px-4 py-2.5 font-medium">Nama</th>
-            <th scope="col" className="px-4 py-2.5 font-medium">Jabatan, sejak</th>
-            <th scope="col" className="px-4 py-2.5 font-medium">Dasar</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line">
-          {d.people.map((p) => (
-            <tr key={p.id} className="align-top">
-              <td className="px-4 py-3">{p.roles.map((r) => ROLE[r]).join(", ") || "Tercatat di akun"}</td>
-              <td className="px-4 py-3 font-medium">{p.name}</td>
-              <td className="px-4 py-3 text-muted">
-                {p.title}, {tanggal(p.since)}
-              </td>
-              <td className="px-4 py-3 text-muted">{p.notes.join(" · ") || "Hanya tercatat di riwayat jabatan."}</td>
+    <div className="space-y-6">
+      <ContactPlanCard d={d} />
+      <div className="overflow-x-auto rounded-xl border border-line bg-panel">
+        <table className="w-full min-w-[40rem] text-left text-sm">
+          <caption className="sr-only">Peta stakeholder {d.account.name}</caption>
+          <thead className="text-xs text-muted">
+            <tr className="border-b border-line">
+              <th scope="col" className="px-4 py-2.5 font-medium">Peran</th>
+              <th scope="col" className="px-4 py-2.5 font-medium">Nama</th>
+              <th scope="col" className="px-4 py-2.5 font-medium">Jabatan, sejak</th>
+              <th scope="col" className="px-4 py-2.5 font-medium">Dasar</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {d.people.map((p) => (
+              <tr key={p.id} className="align-top">
+                <td className="px-4 py-3">{p.roles.map((r) => ROLE[r]).join(", ") || "Tercatat di akun"}</td>
+                <td className="px-4 py-3 font-medium">{p.name}</td>
+                <td className="px-4 py-3 text-muted">
+                  {p.title}, {tanggal(p.since)}
+                </td>
+                <td className="px-4 py-3 text-muted">{p.notes.join(" · ") || "Hanya tercatat di riwayat jabatan."}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Cite } from "~/server/chat-visuals";
+import type { Check } from "~/server/jev";
 import { ChatVisual } from "./chat-visual";
 import { useChat } from "./chat-provider";
 import { Icon } from "./icon";
@@ -77,7 +78,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      <div ref={log} role="log" aria-live="polite" aria-busy={pending} className="flex-1 space-y-5 overflow-y-auto p-4">
+      <div ref={log} role="log" aria-live="polite" aria-busy={pending} className="relative flex-1 space-y-5 overflow-y-auto p-4">
         {msgs.length === 0 && !pending && !error && (
           <div>
             <p className="font-medium">{scope ? `Tanya tentang ${scope.name}` : "Tanya tentang keputusan"}</p>
@@ -122,6 +123,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
                 </details>
               )}
               <Answer text={m.content} cites={m.cites ?? []} onCite={openCite} />
+              {m.check && <JevCheck check={m.check} />}
               {m.visuals?.map((v, j) => <ChatVisual key={j} v={v} />)}
             </div>
           ),
@@ -208,7 +210,7 @@ export function Chat({ onClose }: { onClose: () => void }) {
         </form>
       ) : (
         <p className="shrink-0 border-t border-line p-4 text-sm text-muted">
-          Chat belum dikonfigurasi. Tambahkan <code className="text-ink">GEMINI_API_KEY</code> ke <code className="text-ink">.env</code>, lalu jalankan ulang
+          Chat belum dikonfigurasi. Tambahkan <code className="text-ink">DEEPSEEK_API_KEY</code> ke <code className="text-ink">.env</code>, lalu jalankan ulang
           server.
         </p>
       )}
@@ -219,6 +221,19 @@ export function Chat({ onClose }: { onClose: () => void }) {
 }
 
 // The answer as plain text, with every validated ID turned into a button.
+// Jev's reading of whether the answer stays within the query results (FR-11). Shown only when the check is on.
+function JevCheck({ check }: { check: Check }) {
+  if ("skipped" in check) return <p className="mt-2 text-xs text-muted">Tidak diperiksa Jev: {check.skipped}.</p>;
+  const p = check.supported.toFixed(2).replace(".", ",");
+  return check.warn ? (
+    <p className="mt-2 text-xs text-warn">
+      Jev ({p}): sebagian isi jawaban mungkin tidak didukung hasil query. Cek sitasinya sebelum dipakai.
+    </p>
+  ) : (
+    <p className="mt-2 text-xs text-muted">Diperiksa Jev ({p}): isi jawaban didukung hasil query.</p>
+  );
+}
+
 function Answer({ text, cites, onCite }: { text: string; cites: Cite[]; onCite: (c: Cite) => void }) {
   const byId = new Map(cites.map((c) => [c.id, c]));
   const parts = byId.size ? text.split(new RegExp(`\\b(${[...byId.keys()].join("|")})\\b`)) : [text];
@@ -273,7 +288,7 @@ function RecordDrawer({ record, onClose }: { record: Cite | null; onClose: () =>
               </button>
             </form>
           </div>
-          <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 gap-y-2 overflow-y-auto p-4 text-sm">
+          <dl className="relative grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 gap-y-2 overflow-y-auto p-4 text-sm">
             {Object.entries(record.fields)
               .filter(([, v]) => v)
               .map(([k, v]) => (

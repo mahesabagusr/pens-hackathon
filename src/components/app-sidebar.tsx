@@ -43,7 +43,7 @@ export function AppSidebar({ user, accounts, collapsed, onCollapse, onNavigate, 
         </button>
       </div>
 
-      <nav aria-label="Navigasi dashboard" className="sidebar-navigation">
+      <nav aria-label="Navigasi dashboard" className="sidebar-navigation relative">
         <div className="sidebar-search-slot">
           {collapsed ? (
             <button type="button" onClick={onCollapse} aria-label="Cari akun" title="Cari akun" className="sidebar-row">

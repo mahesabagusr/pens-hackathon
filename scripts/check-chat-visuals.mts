@@ -1,4 +1,4 @@
-// Chat visuals and citations (PRD_DASHBOARD.md §13 US4–US6) against the real graph, without calling Gemini.
+// Chat visuals and citations (PRD_DASHBOARD.md §13 US4–US6) against the real graph, without calling the chat model.
 // Run: npx tsx scripts/check-chat-visuals.mts   (needs `npm run db:up` and a loaded graph)
 import "dotenv/config";
 import assert from "node:assert/strict";

@@ -1,12 +1,12 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring } from "motion/react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { logout } from "~/server/actions/auth";
 import { ScrollLink } from "./motion";
+import { Logo } from "./logo";
 
 const SECTIONS: [string, string][] = [
   ["problem", "Problem"],
@@ -95,7 +95,7 @@ export function Nav({ user }: { user?: NavUser | null }) {
     <header className="sticky top-0 z-10 border-b border-line bg-background">
       <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-4 px-4 py-2 md:grid-cols-[1fr_auto_1fr]">
         <ScrollLink href="/#top" className="flex min-h-11 items-center justify-self-start">
-          <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" priority className="h-7 w-auto" />
+          <Logo size="lg" priority />
         </ScrollLink>
 
         <nav aria-label="Sections" className="hidden items-center gap-1 text-sm md:flex">

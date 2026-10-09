@@ -1,6 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ScrollLink } from "./motion";
+import { Logo } from "./logo";
 
 const link = "flex min-h-10 items-center text-sm text-muted transition-colors duration-150 hover:text-ink";
 
@@ -10,7 +10,7 @@ export function SiteFooter() {
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:grid-cols-[1fr_auto_auto] sm:gap-16">
         <div>
           <ScrollLink href="/#top" className="inline-flex min-h-11 items-center">
-            <Image src="/logo-wordmark.png" width={1046} height={263} alt="Decidely" className="h-7 w-auto" />
+            <Logo size="lg" />
           </ScrollLink>
           <p className="mt-2 max-w-sm text-sm text-muted">
             Every discount, exception and feature promise as a dictionary entry, linked to the deal, the email and the roadmap

@@ -78,7 +78,7 @@ export function ChatVisual({ v }: { v: Visual }) {
                 </button>
               </form>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">{body(true)}</div>
+            <div className="relative min-h-0 flex-1 overflow-auto">{body(true)}</div>
           </div>
         )}
       </dialog>
@@ -100,7 +100,7 @@ function DataTable({ columns, rows, total, big }: { columns: string[]; rows: str
     : rows;
   return (
     <div>
-      <div className={`overflow-auto ${big ? "" : "max-h-72"}`}>
+      <div className={`relative overflow-auto ${big ? "" : "max-h-72"}`}>
         <table className="w-full text-left text-xs">
           <thead className="sticky top-0 bg-panel text-muted">
             <tr>

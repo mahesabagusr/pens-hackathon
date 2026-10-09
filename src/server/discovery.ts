@@ -2,7 +2,8 @@ import { dataset, type Row } from "./dataset";
 
 // Decision Maker Discovery engine (PRD_DECISION_MAKER_DISCOVERY.md §9). Deterministic rules over the raw dataset;
 // every conclusion carries the records it rests on.
-// ponytail: claims are found with keyword rules, not Jev. Swap `claimKind` for a Jev judgment once API access exists (PRD §11).
+// Claims in text come from stored Jev judgments when they exist (PRD_JEV.md), otherwise from the keyword rules below.
+// Either way the status rules here decide what counts as identified; Jev only reads the text.
 
 export const SNAPSHOT = "2026-10-01";
 
@@ -20,7 +21,33 @@ export type Evidence = {
   date?: string;
   origin: Origin;
   excerpt?: string;
+  claims?: Claim[]; // what this text was read as claiming, and by what
 };
+export type ClaimKind = "dm" | "sign" | "technical" | "reference";
+export type Claim = { kind: ClaimKind; by: "jev" | "rules"; p?: number }; // p: Jev probability, absent for rules
+
+// Jev answers for one interaction, stored by scripts/judge-interactions.mts (PRD_JEV.md §8).
+export type Pick = { choice: string; probabilities: Record<string, number> };
+export type Judgment = { dm_claim: number; dm_who: Pick; sign_claim: number; sign_who: Pick; technical_who: Pick; reference_request: number };
+export type Judgments = { model: string; version: string; byInteraction: Map<string, Judgment> };
+export const NONE = "tidak_disebut";
+// A claim needs `claim`. A picked person needs `pick`, and no other person may get more than `rival`: Jev being
+// unsure whether anyone is named at all (I0343: Rina 0.71, "tidak disebut" 0.29, others 0) is fine, two people
+// competing for the role is not. The employment-date check in discover() still applies on top.
+// ponytail: chosen from the first real P01 run; confirm with `judge-interactions.mts --report` on the gold set (PRD_JEV.md §14).
+export const THRESHOLDS = { claim: 0.8, pick: 0.6, rival: 0.2 };
+
+// Jev's pick of a person, and whether it is clear enough to use. Shared with the --report in judge-interactions.mts.
+export function pickOf(pick: Pick) {
+  if (pick.choice === NONE) return null;
+  const p = pick.probabilities[pick.choice] ?? 0;
+  const rival = Object.entries(pick.probabilities)
+    .filter(([id]) => id !== pick.choice && id !== NONE)
+    .map(([id, q]) => ({ id, p: q }))
+    .sort((a, b) => b.p - a.p)[0];
+  const contested = !!rival && rival.p > THRESHOLDS.rival;
+  return { id: pick.choice, p, rival: contested ? rival : null, sure: p >= THRESHOLDS.pick && !contested };
+}
 
 export type Person = { id: string; name: string; title: string; since: string; roles: Role[]; notes: string[]; evidence: string[] };
 export type Finding = { status: Status; personId: string | null; claim: string | null; why: string; evidence: string[] };
@@ -62,6 +89,32 @@ export type Discovery = {
   explanation: string;
   evidence: Evidence[];
   graph: { nodes: GraphNode[]; edges: GraphEdge[] };
+  // How this account's interactions were read: by Jev (model, version) or by the keyword rules.
+  method: { jev: number; rules: number; model: string | null; version: string | null };
+  contacts: ContactPlan;
+};
+
+// Who Sales contacts first, through whom, and what to bring (PRD_CONTACT_PLAN.md).
+export type Route =
+  | { kind: "direct"; note: string; evidence: string[] }
+  | { kind: "intro_contact"; via: string; note: string; evidence: string[] } // via: contact id
+  | { kind: "intro_staff"; via: string; note: string; evidence: string[] }; // via: employee id
+export type ContactEntry = {
+  personId: string;
+  rank: number;
+  role: string;
+  why: string;
+  ask: string;
+  routes: Route[];
+  prepare: { text: string; evidence: string[] }[];
+  last: { date: string; interactionId: string; ref: string; accountId: string | null; accountName: string | null } | null;
+  email: string | null;
+  evidence: string[];
+};
+export type ContactPlan = {
+  owner: string | null;
+  entries: ContactEntry[];
+  notYet: { personId: string; reason: string; askVia: string | null; evidence: string[] }[];
 };
 
 const DM_CLAIM = /keputusan[^.]{0,60}\b(ada di|di tangan|oleh)\b|memutuskan|yang menentukan|pemutus/i;
@@ -70,10 +123,23 @@ const TECHNICAL = /teknis/i;
 const SENIOR = /direktur|pemilik|owner|ceo|\bgm\b|general manager|\bvp\b/i;
 const REFERENCE = /referensi|rekomendasi dari pengguna/i;
 
-const covers = (h: Row, date: string) => h.mulai <= date && (!h.selesai || h.selesai >= date);
+// What the keyword rules read in a text, for comparing them with Jev (scripts/judge-interactions.mts --report).
+export const keywordClaims = (text: string) => ({ dm: DM_CLAIM.test(text), sign: SIGN_CLAIM.test(text), reference: REFERENCE.test(text) });
+export const covers = (h: Row, date: string) => h.mulai <= date && (!h.selesai || h.selesai >= date);
 const firstName = (name: string) => name.split(" ")[0];
 const mentions = (text: string, word: string) => new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text);
 export const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
+const dec = (p: number) => p.toFixed(2).replace(".", ",");
+// An interaction id with what it is, so text says "email I0343" or "catatan meeting I0334", never a bare id.
+const TIPE: Record<string, string> = { email: "email", email_internal: "email internal", catatan_meeting: "catatan meeting" };
+export const ref = (i: Row) => `${TIPE[i.tipe] ?? "interaksi"} ${i.interaction_id}`;
+const Ref = (i: Row) => ref(i).charAt(0).toUpperCase() + ref(i).slice(1);
+// Several at once: "email I0051, I0066 dan I0223" when they share a type, otherwise each one labelled.
+const refs = (rows: Row[]) => {
+  const ids = rows.map((r) => r.interaction_id);
+  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} dan ${xs.at(-1)}` : xs[0]);
+  return new Set(rows.map((r) => r.tipe)).size === 1 ? `${TIPE[rows[0].tipe] ?? "interaksi"} ${list(ids)}` : list(rows.map(ref));
+};
 export const tanggal = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
@@ -90,7 +156,7 @@ export function accountOptions() {
   return dataset().accounts.map((a) => ({ id: a.account_id, name: a.nama, type: a.tipe }));
 }
 
-export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
+export function discover(accountId: string, asOf = SNAPSHOT, judged?: Judgments): Discovery | null {
   const d = dataset();
   const acc = d.accounts.find((a) => a.account_id === accountId);
   if (!acc) return null;
@@ -100,6 +166,10 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
     const id = `${e.file}:${e.row}:${e.column}`;
     if (!evidence.some((x) => x.id === id)) evidence.push({ ...e, id });
     return id;
+  };
+  const mark = (evId: string, claim: Claim) => {
+    const e = evidence.find((x) => x.id === evId)!;
+    if (!e.claims?.some((c) => c.kind === claim.kind)) e.claims = [...(e.claims ?? []), claim];
   };
   const nodes = new Map<string, GraphNode>();
   const edges: GraphEdge[] = [];
@@ -146,37 +216,72 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
 
   // Read the account's external conversations up to the as-of date.
   const talks = d.interactions.filter((i) => i.account_id === acc.account_id && i.tanggal <= asOf && i.tipe !== "email_internal");
-  const claims: { kind: "dm" | "sign"; person: Person | null; how: "name" | "role" | null; i: Row; evId: string }[] = [];
+  type Found = { kind: "dm" | "sign"; person: Person | null; how: "name" | "role" | null; i: Row; evId: string; p?: number; hint?: string };
+  const claims: Found[] = [];
+  let byJev = 0;
+  // A Jev pick that is not clear enough is kept as a hint for the "why" text.
+  const picked = pickOf;
   for (const i of talks) {
     const text = i.isi;
-    const iEv = () => ev({ label: `${i.tipe === "email" ? "Email" : "Meeting"} ${i.interaction_id}`, file: "interactions.jsonl", row: +i._row, column: "isi", date: i.tanggal, origin: "text_claim", excerpt: text });
+    const j = judged?.byInteraction.get(i.interaction_id);
+    if (j) byJev++;
+    const iEv = () => ev({ label: Ref(i), file: "interactions.jsonl", row: +i._row, column: "isi", date: i.tanggal, origin: "text_claim", excerpt: text });
     const sender = byEmail(i.dari);
     const present = String(i.peserta ?? "").split(";").map((k) => people.get(k)).filter(Boolean) as Person[];
 
     for (const p of new Set([...present, ...(sender ? [sender] : []), ...(i.ke ? [byEmail(i.ke)].filter(Boolean) as Person[] : [])])) {
-      add(p, "discovery_contact", `Terlibat di ${i.interaction_id} (${tanggal(i.tanggal)}): ${i.subjek}`, iEv());
-      node({ id: i.interaction_id, label: i.interaction_id, kind: "interaction" });
+      add(p, "discovery_contact", `Terlibat di ${ref(i)} (${tanggal(i.tanggal)}): ${i.subjek}`, iEv());
+      node({ id: i.interaction_id, label: Ref(i), kind: "interaction" });
       edges.push({ from: i.interaction_id, to: p.id, type: "MELIBATKAN", origin: "record", evidence: [iEv()] });
     }
-    if (TECHNICAL.test(text)) {
-      for (const p of people.values()) {
-        const selfClaim = sender === p && /\bsaya\b/i.test(text);
-        if (selfClaim || mentions(text, firstName(p.name))) {
-          add(p, "evaluator", `Menilai sisi teknis menurut ${i.interaction_id}`, iEv());
-          node({ id: i.interaction_id, label: i.interaction_id, kind: "interaction" });
-          edges.push({ from: i.interaction_id, to: p.id, type: "MENYEBUT", origin: "text_claim", evidence: [iEv()] });
-        }
-      }
+    const evaluators = j
+      ? [picked(j.technical_who)].filter((x) => x?.sure && people.has(x.id)).map((x) => ({ person: people.get(x!.id)!, p: x!.p }))
+      : TECHNICAL.test(text)
+        ? [...people.values()].filter((p) => (sender === p && /\bsaya\b/i.test(text)) || mentions(text, firstName(p.name))).map((person) => ({ person, p: undefined }))
+        : [];
+    for (const { person: p, p: prob } of evaluators) {
+      const evId = iEv();
+      add(p, "evaluator", `Menilai sisi teknis menurut ${ref(i)}`, evId);
+      mark(evId, { kind: "technical", by: j ? "jev" : "rules", p: prob });
+      node({ id: i.interaction_id, label: Ref(i), kind: "interaction" });
+      edges.push({ from: i.interaction_id, to: p.id, type: "MENYEBUT", origin: "text_claim", evidence: [evId] });
     }
     for (const kind of ["dm", "sign"] as const) {
-      if (!(kind === "dm" ? DM_CLAIM : SIGN_CLAIM).test(text)) continue;
+      const claimP = j ? (kind === "dm" ? j.dm_claim : j.sign_claim) : undefined;
+      if (j ? claimP! < THRESHOLDS.claim : !(kind === "dm" ? DM_CLAIM : SIGN_CLAIM).test(text)) continue;
       const others = [...people.values()].filter((p) => p !== sender);
-      const named = others.filter((p) => mentions(text, firstName(p.name)) || mentions(text, p.name));
-      // Role match must hold on the day the claim was written, not just today.
-      const byRole = others.filter((p) => mentions(text, p.title) && d.history.some((h) => h.contact_id === p.id && h.account_id === acc.account_id && covers(h, i.tanggal)));
-      const person = named.length === 1 ? named[0] : byRole.length === 1 ? byRole[0] : null;
-      claims.push({ kind, person, how: named.length === 1 ? "name" : byRole.length === 1 ? "role" : null, i, evId: iEv() });
-      node({ id: i.interaction_id, label: i.interaction_id, kind: "interaction" });
+      // Worked at this account on the day the claim was written, not just on the as-of date.
+      const heldOn = (p: Person) => d.history.some((h) => h.contact_id === p.id && h.account_id === acc.account_id && covers(h, i.tanggal));
+      const named = (p: Person) => mentions(text, firstName(p.name)) || mentions(text, p.name);
+      let person: Person | null = null;
+      let how: Found["how"] = null;
+      let hint: string | undefined;
+      if (j) {
+        const pick = picked(kind === "dm" ? j.dm_who : j.sign_who);
+        const p = pick ? others.find((o) => o.id === pick.id) : undefined;
+        // Same uniqueness as the keyword rule: nobody else held that title at the account that day.
+        const unique = p && heldOn(p) && !others.some((o) => o !== p && o.title.toLowerCase() === p.title.toLowerCase() && heldOn(o));
+        if (pick?.sure && unique) {
+          person = p;
+          how = named(p) ? "name" : "role";
+        } else if (p) {
+          const why = pick!.rival
+            ? `, tetapi ${people.get(pick!.rival.id)?.name ?? pick!.rival.id} juga ${dec(pick!.rival.p)}, di atas batas pesaing ${dec(THRESHOLDS.rival)}`
+            : pick!.sure
+              ? ", tetapi riwayat jabatan tidak mendukung"
+              : `, di bawah ambang ${dec(THRESHOLDS.pick)}`;
+          hint = `Jev menunjuk ${p.name} (${dec(pick!.p)})${why}. Perlu verifikasi.`;
+        }
+      } else {
+        const byName = others.filter(named);
+        const byRole = others.filter((p) => mentions(text, p.title) && heldOn(p));
+        person = byName.length === 1 ? byName[0] : byRole.length === 1 ? byRole[0] : null;
+        how = byName.length === 1 ? "name" : byRole.length === 1 ? "role" : null;
+      }
+      const evId = iEv();
+      mark(evId, { kind, by: j ? "jev" : "rules", p: claimP });
+      claims.push({ kind, person, how, i, evId, p: j ? (kind === "dm" ? j.dm_who : j.sign_who).probabilities[person?.id ?? ""] : undefined, hint });
+      node({ id: i.interaction_id, label: Ref(i), kind: "interaction" });
     }
   }
 
@@ -190,19 +295,26 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
       const c = resolved[0];
       const p = c.person!;
       const evIds = [c.evId, ...p.evidence.slice(0, 1)];
-      add(p, kind === "dm" ? "decision_maker" : "approver", `Disebut sebagai ${what} di ${c.i.interaction_id}`, c.evId);
+      add(p, kind === "dm" ? "decision_maker" : "approver", `Disebut sebagai ${what} di ${ref(c.i)}`, c.evId);
       edges.push({ from: c.i.interaction_id, to: p.id, type: c.how === "role" ? "MENYEBUT (peran)" : "MENYEBUT", origin: c.how === "role" ? "cross_source_match" : "text_claim", evidence: evIds });
       return c.how === "name"
-        ? { status: "teridentifikasi_langsung", personId: p.id, claim: what, why: `${c.i.interaction_id} menyebut ${p.name} sebagai ${what}.`, evidence: evIds }
+        ? { status: "teridentifikasi_langsung", personId: p.id, claim: what, why: `${Ref(c.i)} menyebut ${p.name} sebagai ${what}.`, evidence: evIds }
         : {
             status: "teridentifikasi_lintas_sumber",
             personId: p.id,
             claim: what,
-            why: `${c.i.interaction_id} menyebut ${what} adalah ${p.title}. Riwayat jabatan menunjukkan satu-satunya ${p.title} di ${acc.nama} pada ${tanggal(c.i.tanggal)} adalah ${p.name} (sejak ${tanggal(p.since)}).`,
+            why:
+              c.p === undefined
+                ? `${Ref(c.i)} menyebut ${what} adalah ${p.title}. Riwayat jabatan menunjukkan satu-satunya ${p.title} di ${acc.nama} pada ${tanggal(c.i.tanggal)} adalah ${p.name} (sejak ${tanggal(p.since)}).`
+                : `${Ref(c.i)} menyebut ${what}; Jev mencocokkannya dengan ${p.name} (${dec(c.p)}), tanpa kandidat lain di atas ${dec(THRESHOLDS.rival)}. Riwayat jabatan menunjukkan ${p.name} satu-satunya ${p.title} di ${acc.nama} pada ${tanggal(c.i.tanggal)} (sejak ${tanggal(p.since)}).`,
             evidence: evIds,
           };
     }
-    const why = distinct.size > 1 ? `Sumber menunjuk lebih dari satu orang sebagai ${what}; perlu verifikasi.` : `${found[0].i.interaction_id} menyebut ada ${what}, tetapi peran itu tidak cocok dengan tepat satu kontak di ${acc.nama}.`;
+    const hint = found.find((c) => c.hint)?.hint;
+    const why =
+      distinct.size > 1
+        ? `Sumber menunjuk lebih dari satu orang sebagai ${what}; perlu verifikasi.`
+        : `${Ref(found[0].i)} menyebut ada ${what}, tetapi peran itu tidak cocok dengan tepat satu kontak di ${acc.nama}.${hint ? ` ${hint}` : ""}`;
     return { status: distinct.size > 1 ? "kandidat" : "belum_teridentifikasi", personId: null, claim: what, why, evidence: found.map((c) => c.evId) };
   };
 
@@ -282,6 +394,11 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
 
   // Unknowns and next steps follow from what is and is not established.
   const peopleList = [...people.values()];
+  const latest = (p: Person) => p.evidence.map((id) => evidence.find((e) => e.id === id)?.date ?? "").sort().at(-1) ?? "";
+  // Who to ask first when nobody is identified: the contact KasirNusa spoke with most recently, then most often.
+  const talkers = peopleList
+    .filter((p) => p.roles.includes("discovery_contact"))
+    .sort((a, b) => latest(b).localeCompare(latest(a)) || b.evidence.length - a.evidence.length);
   const dm = decisionMaker.personId ? people.get(decisionMaker.personId)! : null;
   const owner = deal?.owner ?? "Sales";
   const steps: Step[] = [];
@@ -293,7 +410,7 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
     steps.push({ text: `Konfirmasi langsung ke ${dm.name}: kriteria keputusan, jadwal pengadaan, dan siapa yang menandatangani kontrak.`, evidence: decisionMaker.evidence });
     if (!approver) unknowns.push(`Pemegang anggaran dan penandatangan kontrak belum diketahui; belum tentu ${dm.name}.`);
   } else {
-    const ask = peopleList.filter((p) => p.roles.includes("discovery_contact")).sort((a, b) => b.evidence.length - a.evidence.length)[0];
+    const ask = talkers[0];
     unknowns.unshift(`Siapa yang memutuskan pembelian di ${acc.nama}? Sumber sampai ${tanggal(asOf)} tidak cukup untuk memilih satu orang.`);
     if (ask) steps.push({ text: `${owner} tanyakan ke ${ask.name} (${ask.title}): siapa yang menyetujui anggaran dan menandatangani pengadaan sistem kasir?`, evidence: ask.evidence });
     for (const c of peopleList.filter((p) => p.roles.includes("candidate"))) {
@@ -301,14 +418,159 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
     }
     if (!ask && !peopleList.length) steps.push({ text: `Belum ada kontak tercatat di ${acc.nama} pada tanggal ini. Mulai discovery lewat pemegang akun.`, evidence: [accEv] });
   }
-  const refTalk = talks.filter((i) => REFERENCE.test(i.isi)).at(-1);
+  const asksReference = (i: Row) => {
+    const j = judged?.byInteraction.get(i.interaction_id);
+    return j ? j.reference_request >= THRESHOLDS.claim : REFERENCE.test(i.isi);
+  };
+  const refTalk = talks.filter(asksReference).at(-1);
   if (refTalk) {
-    steps.push({ text: `Siapkan referensi pelanggan ${acc.industri.toLowerCase()} yang sudah memakai KasirNusa; diminta di ${refTalk.interaction_id} (${tanggal(refTalk.tanggal)}).`, evidence: [ev({ label: `${refTalk.tipe === "email" ? "Email" : "Meeting"} ${refTalk.interaction_id}`, file: "interactions.jsonl", row: +refTalk._row, column: "isi", date: refTalk.tanggal, origin: "text_claim", excerpt: refTalk.isi })] });
+    const refEv = ev({ label: Ref(refTalk), file: "interactions.jsonl", row: +refTalk._row, column: "isi", date: refTalk.tanggal, origin: "text_claim", excerpt: refTalk.isi });
+    const j = judged?.byInteraction.get(refTalk.interaction_id);
+    mark(refEv, { kind: "reference", by: j ? "jev" : "rules", p: j?.reference_request });
+    steps.push({ text: `Siapkan referensi pelanggan ${acc.industri.toLowerCase()} yang sudah memakai KasirNusa; diminta di ${ref(refTalk)} (${tanggal(refTalk.tanggal)}).`, evidence: [refEv] });
   }
   for (const pr of precedents.filter((x) => x.promise && /belum/i.test(x.promise) && x.account !== acc.account_id)) {
     steps.push({ text: `Siapkan jawaban soal janji ${pr.id} sebelum bertemu: ${pr.promise}.`, evidence: pr.evidence });
     unknowns.push(`Apakah janji lama ${pr.id} memengaruhi sikap di ${acc.nama} belum terbukti dari data.`);
   }
+
+  // ---- Contact plan (PRD_CONTACT_PLAN.md §8): built only from the findings above, so it can't disagree with them.
+  const contactPlan = (): ContactPlan => {
+    const identified = (f: Finding | null) => !!f?.personId && f.status.startsWith("teridentifikasi");
+    const local = (email: string) => email.split("@")[0].toLowerCase();
+    const talkEv = (i: Row) => ev({ label: Ref(i), file: "interactions.jsonl", row: +i._row, column: "isi", date: i.tanggal, origin: "text_claim", excerpt: i.isi });
+    // Everything a person took part in before asOf, at any account: by meeting id, current email, or an older
+    // address with the same name part at an account they worked at (the graph loader's "email lama" rule).
+    const involved = (p: Person) => {
+      const c = contact(p.id)!;
+      const worked = new Set(d.history.filter((h) => h.contact_id === p.id && h.account_id).map((h) => h.account_id));
+      return d.interactions.filter(
+        (i) =>
+          i.tanggal <= asOf &&
+          (String(i.peserta ?? "").split(";").includes(p.id) ||
+            [i.dari, i.ke].some((e) => !!e && (e === c.email || (worked.has(i.account_id) && !e.endsWith("@kasirnusa.id") && local(e) === local(c.email))))),
+      );
+    };
+    const staffIn = (i: Row) =>
+      d.employees.filter((e) => e.email === i.dari || e.email === i.ke || String(i.peserta ?? "").split(";").includes(e.employee_id));
+
+    const routes = (p: Person, claim?: (typeof claims)[number]): Route[] => {
+      const all = involved(p);
+      const here = all.filter((i) => i.account_id === acc.account_id);
+      if (here.length) {
+        const lastHere = here.at(-1)!;
+        return [{ kind: "direct", note: `Langsung: sudah berbicara dengan KasirNusa di akun ini, terakhir ${ref(lastHere)} (${tanggal(lastHere.tanggal)}).`, evidence: [talkEv(lastHere)] }];
+      }
+      const out: Route[] = [];
+      const sender = claim ? byEmail(claim.i.dari) : undefined;
+      if (claim && sender && sender !== p && involved(sender).some((i) => i.account_id === acc.account_id)) {
+        out.push({
+          kind: "intro_contact",
+          via: sender.id,
+          note: `Lewat ${sender.name} (${sender.title}): ia yang menyebutnya di ${ref(claim.i)} dan sudah berbicara dengan KasirNusa.`,
+          evidence: [claim.evId],
+        });
+      }
+      // KasirNusa staff who already spoke with this person at another account.
+      const elsewhere = all.filter((i) => i.account_id && i.account_id !== acc.account_id);
+      const byStaff = new Map<string, Row[]>();
+      for (const i of elsewhere) for (const e of staffIn(i)) byStaff.set(e.employee_id, [...(byStaff.get(e.employee_id) ?? []), i]);
+      const [staffId, staffTalks] = [...byStaff.entries()].sort((a, b) => b[1].length - a[1].length)[0] ?? [];
+      if (staffId && staffTalks) {
+        const where = d.accounts.find((a) => a.account_id === staffTalks[0].account_id)?.nama ?? staffTalks[0].account_id;
+        const [a, z] = [staffTalks[0], staffTalks.at(-1)!];
+        out.push({
+          kind: "intro_staff",
+          via: staffId,
+          note: `Lewat ${employee(staffId)!.nama} (KasirNusa): sudah berhubungan dengannya di ${where}, ${staffTalks.length} percakapan dari ${ref(a)} (${tanggal(a.tanggal)}) sampai ${ref(z)} (${tanggal(z.tanggal)}).`,
+          evidence: staffTalks.map(talkEv),
+        });
+      }
+      return out.slice(0, 2);
+    };
+
+    let refShown = false;
+    const prepare = (p: Person, claim?: (typeof claims)[number]) => {
+      const items: { text: string; evidence: string[] }[] = [];
+      for (const pr of precedents) {
+        if (!pr.promise || !/belum/i.test(pr.promise) || pr.account === acc.account_id) continue;
+        const job = d.history.find((h) => h.contact_id === p.id && h.account_id === pr.account && h.mulai <= pr.date && (!h.selesai || h.selesai >= pr.date));
+        if (!job) continue;
+        // Interactions with this person about the promised feature, matched on the words of its name ("integrasi", "accurate").
+        const feature = d.features.find((f) => f.feature_id === d.decisions.find((r) => r.decision_id === pr.id)?.fitur_dijanjikan);
+        const words = (feature?.nama.toLowerCase().match(/[a-z]{6,}/g) ?? []);
+        const there = involved(p).filter((i) => i.account_id === pr.account && words.some((w) => i.isi.toLowerCase().includes(w)));
+        const where = d.accounts.find((a) => a.account_id === pr.account)?.nama ?? pr.account;
+        items.push({
+          text: `Janji ${pr.id}: ${pr.promise}. Ia bekerja di ${where} saat janji ini dibuat${there.length ? ` dan membahas fitur ini langsung dengan KasirNusa (${refs(there)})` : ""}.`,
+          evidence: [...pr.evidence, ...there.map(talkEv)],
+        });
+      }
+      if (refTalk && !refShown && (involved(p).includes(refTalk) || claim?.i === refTalk)) {
+        refShown = true;
+        items.push({ text: `Referensi pelanggan ${acc.industri.toLowerCase()} yang sudah memakai KasirNusa, diminta di ${ref(refTalk)} (${tanggal(refTalk.tanggal)}).`, evidence: [talkEv(refTalk)] });
+      }
+      return items;
+    };
+
+    const entries: ContactEntry[] = [];
+    const put = (p: Person | null | undefined, role: string, why: string, whyEv: string[], ask: string, claim?: (typeof claims)[number]) => {
+      if (!p || entries.length >= 3 || entries.some((e) => e.personId === p.id)) return;
+      const r = routes(p, claim);
+      const prep = prepare(p, claim);
+      const last = involved(p).at(-1);
+      entries.push({
+        personId: p.id,
+        rank: entries.length + 1,
+        role,
+        why,
+        ask,
+        routes: r,
+        prepare: prep,
+        last: last ? { date: last.tanggal, interactionId: last.interaction_id, ref: ref(last), accountId: last.account_id || null, accountName: d.accounts.find((a) => a.account_id === last.account_id)?.nama ?? null } : null,
+        email: contact(p.id)?.email ?? null,
+        evidence: [...new Set([...whyEv, ...r.flatMap((x) => x.evidence), ...prep.flatMap((x) => x.evidence), ...(last ? [talkEv(last)] : [])])],
+      });
+    };
+    const statusText = (s: Status) => (s === "teridentifikasi_langsung" ? "langsung" : "lintas sumber");
+    const claimFor = (kind: "dm" | "sign", p: Person | null) => claims.find((c) => c.kind === kind && c.person === p);
+
+    if (identified(decisionMaker)) {
+      const p = people.get(decisionMaker.personId!)!;
+      put(p, `Pemutus pengadaan · ${statusText(decisionMaker.status)}`, decisionMaker.why, decisionMaker.evidence, "Kriteria keputusan, jadwal pengadaan, dan siapa yang menandatangani kontrak.", claimFor("dm", p));
+    }
+    if (approver && identified(approver)) {
+      const p = people.get(approver.personId!)!;
+      put(p, `Penandatangan · ${statusText(approver.status)}`, approver.why, approver.evidence, "Anggaran dan proses tanda tangan; siapa lagi yang ikut memutuskan.", claimFor("sign", p));
+    }
+    if (!identified(decisionMaker)) {
+      const top = talkers[0];
+      if (top)
+        put(
+          top,
+          "Kontak discovery",
+          talkers.length === 1 ? `Satu-satunya kontak di ${acc.nama} yang sudah berbicara dengan KasirNusa.` : `Kontak di ${acc.nama} yang terakhir berbicara dengan KasirNusa (${tanggal(latest(top))}).`,
+          top.evidence,
+          "Siapa yang menyetujui anggaran dan menandatangani pengadaan sistem kasir?",
+        );
+    }
+    for (const p of peopleList.filter((x) => x.roles.includes("champion")))
+      put(p, "Champion", "Tercatat sebagai champion di CRM dan masih bekerja di akun ini.", p.evidence, "Dukungan internal: siapa yang perlu diyakinkan dan apa keberatannya.");
+    for (const p of peopleList.filter((x) => x.roles.includes("evaluator")))
+      put(p, "Penilai teknis", p.notes.find((n) => /teknis/i.test(n)) ?? "Menilai sisi teknis.", p.evidence, "Kebutuhan teknis yang harus dipenuhi; jaga dukungannya selama evaluasi.");
+
+    const first = entries[0] ? people.get(entries[0].personId)! : null;
+    const notYet = peopleList
+      .filter((p) => !entries.some((e) => e.personId === p.id) && (p.roles.includes("candidate") || p.roles.includes("senior")))
+      .map((p) => ({
+        personId: p.id,
+        reason: `${p.roles.includes("senior") ? "Jabatan senior tanpa bukti peran dalam pengadaan ini" : `Jabatan ${p.title}; perannya dalam keputusan belum ada bukti`}${first ? `; tanyakan ke ${first.name} dulu` : ""}.`,
+        askVia: first?.id ?? null,
+        evidence: p.evidence,
+      }));
+    return { owner: deal?.owner ?? employee(acc.account_owner_id)?.nama ?? null, entries, notYet };
+  };
+  const contacts = contactPlan();
 
   const order: Role[] = ["decision_maker", "approver", "champion", "evaluator", "candidate", "discovery_contact", "senior"];
   const rank = (p: Person) => Math.min(...p.roles.map((r) => order.indexOf(r)).concat(order.length));
@@ -335,5 +597,7 @@ export function discover(accountId: string, asOf = SNAPSHOT): Discovery | null {
     explanation,
     evidence,
     graph: { nodes: [...nodes.values()], edges: edges.filter((e, i) => edges.findIndex((x) => x.from === e.from && x.to === e.to && x.type === e.type) === i) },
+    method: { jev: byJev, rules: talks.length - byJev, model: byJev ? judged!.model : null, version: byJev ? judged!.version : null },
+    contacts,
   };
 }

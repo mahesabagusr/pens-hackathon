@@ -1,18 +1,17 @@
-import {
-  GoogleGenAI,
-  type Content,
-  type FunctionDeclaration,
-  type Part,
-} from "@google/genai";
 import neo4j, { type Record as NeoRecord } from "neo4j-driver";
 import { z } from "zod";
 import { currentUser } from "~/server/auth";
 import { buildVisual, citesIn, type Visual } from "~/server/chat-visuals";
 import { dataset } from "~/server/dataset";
 import { graph } from "~/server/graph";
+import { checkAnswer, checkEnabled } from "~/server/jev";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-flash-latest";
-const MAX_STEPS = 5; // three query rounds, one `show` round, one answer
+// DeepSeek speaks the OpenAI chat-completions format, so plain fetch is enough (no SDK).
+const API = "https://api.deepseek.com/chat/completions";
+const MODEL = process.env.DEEPSEEK_MODEL || "deepseek-flash";
+// Three query rounds, one `show` round, one answer. The last round has tools switched off: DeepSeek ignores the
+// prompt's round budget and keeps querying, so it must answer from what it found instead of running out.
+const MAX_STEPS = 5;
 const MAX_VISUALS = 2;
 const MAX_RESULT_CHARS = 12_000;
 
@@ -37,44 +36,88 @@ Relationships:
 
 Rules:
 - Company policy: a discount above 10% needs VP Sales approval and must appear in the decision log.
+- Who decides, signs or evaluates a purchase is usually written only in the text of emails and meeting notes (Interaksi.isi), often as a job title rather than a name. Read that text, then match the title to Kontak through BEKERJA_DI {jabatan, mulai, selesai} on the interaction's date.
 - The data is deliberately untidy. CRM fields can be stale (a champion may have left the account), and emails in Interaksi can use an old address. Cross-check sources before you conclude.
 - Always add LIMIT. Each query is a costly round trip: answer in at most 3 query rounds, and fetch related facts together in one query (use OPTIONAL MATCH and collect()).
-- Answer in the language the user wrote in. Plain text, no markdown, short lines. Cite ids (for example D-2025-11, I0061, C01) so each claim can be traced.
+- Answer in the language the user wrote in. Plain text, no markdown, short lines. Cite ids (for example D-2025-11, I0061, C01) so each claim can be traced. When you cite an interaction, say what it is from Interaksi.tipe: "email I0343", "catatan meeting I0334", "email internal I0061".
 - If the graph does not hold the answer, say so. Do not guess or invent names, numbers or reasons.
 - Each cypher result carries a query number. When a result is better seen than read (more than 5 rows, counts per group, a trend over time, a set of connected entities), call the show tool once with that number before you answer. For a graph, return nodes, relationships or paths from the query, not only properties. For bar or line charts, x and y must be returned column names and y must be numeric.`;
 
-const CYPHER_TOOL: FunctionDeclaration = {
-  name: "cypher",
-  description:
-    "Run one read-only Cypher query against the KasirNusa graph. Returns up to 50 rows as JSON.",
-  parametersJsonSchema: {
-    type: "object",
-    properties: {
-      query: {
-        type: "string",
-        description: "Cypher statement with an explicit LIMIT",
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "cypher",
+      description:
+        "Run one read-only Cypher query against the KasirNusa graph. Returns up to 50 rows as JSON.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Cypher statement with an explicit LIMIT",
+          },
+        },
+        required: ["query"],
       },
     },
-    required: ["query"],
   },
-};
-
-const SHOW_TOOL: FunctionDeclaration = {
-  name: "show",
-  description:
-    "Draw the rows of an earlier cypher result for the user as a graph, table, bar chart or line chart. The server draws from the real rows; you only choose how.",
-  parametersJsonSchema: {
-    type: "object",
-    properties: {
-      query: { type: "integer", description: "The query number of a successful cypher result" },
-      kind: { type: "string", enum: ["graph", "table", "bar", "line"] },
-      title: { type: "string", description: "Short title in the user's language" },
-      x: { type: "string", description: "bar/line only: column for categories or dates" },
-      y: { type: "string", description: "bar/line only: numeric column" },
+  {
+    type: "function",
+    function: {
+      name: "show",
+      description:
+        "Draw the rows of an earlier cypher result for the user as a graph, table, bar chart or line chart. The server draws from the real rows; you only choose how.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "integer", description: "The query number of a successful cypher result" },
+          kind: { type: "string", enum: ["graph", "table", "bar", "line"] },
+          title: { type: "string", description: "Short title in the user's language" },
+          x: { type: "string", description: "bar/line only: column for categories or dates" },
+          y: { type: "string", description: "bar/line only: numeric column" },
+        },
+        required: ["query", "kind", "title"],
+      },
     },
-    required: ["query", "kind", "title"],
   },
-};
+];
+
+type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+type Message =
+  | { role: "system" | "user"; content: string }
+  // reasoning_content stays on assistant turns: DeepSeek's thinking mode needs it echoed back during tool calls.
+  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[]; reasoning_content?: string }
+  | { role: "tool"; tool_call_id: string; content: string };
+
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function complete(messages: Message[], answerNow: boolean) {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
+    // reasoning_effort "low": the cheapest level the model offers; the questions are lookups, not puzzles.
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      tools: TOOLS,
+      tool_choice: answerNow ? "none" : "auto",
+      max_tokens: 4000,
+      reasoning_effort: "low",
+    }),
+    signal: AbortSignal.timeout(90_000),
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  const data = (await res.json()) as { choices: { message: Extract<Message, { role: "assistant" }> }[] };
+  return data.choices[0].message;
+}
 
 const Show = z.object({
   query: z.coerce.number().int().min(0),
@@ -152,13 +195,13 @@ function limited(ip: string) {
   return recent.length > 8;
 }
 
-// Gemini answers 503 when it is overloaded; that is usually gone within seconds.
+// DeepSeek answers 503 when it is overloaded; that is usually gone within seconds.
 async function withRetry<T>(call: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await call();
     } catch (e) {
-      if ((e as { status?: number }).status !== 503 || attempt === 3) throw e;
+      if (!(e instanceof ApiError) || e.status !== 503 || attempt === 3) throw e;
       await new Promise((r) => setTimeout(r, 2000 * attempt));
     }
   }
@@ -168,11 +211,11 @@ export async function POST(req: Request) {
   if (!(await currentUser().catch(() => null)))
     return Response.json({ error: "Your session ended. Log in again." }, { status: 401 });
 
-  if (!process.env.GEMINI_API_KEY)
+  if (!process.env.DEEPSEEK_API_KEY)
     return Response.json(
       {
         error:
-          "Chat is not configured. Add GEMINI_API_KEY to .env and restart.",
+          "Chat is not configured. Add DEEPSEEK_API_KEY to .env and restart.",
       },
       { status: 503 },
     );
@@ -190,65 +233,62 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid request." }, { status: 400 });
 
   let system = SYSTEM;
+  let viewing = "";
   const ctx = body.data.context;
   if (ctx?.accountId) {
     const account = dataset().accounts.find((a) => a.account_id === ctx.accountId);
     if (!account) return Response.json({ error: "Unknown account." }, { status: 400 });
     const selected = ctx.selectedNodeId ? citesIn(ctx.selectedNodeId)[0] : undefined;
-    system += `\n\nThe user is viewing account ${account.account_id} (${account.nama}) as of ${ctx.asOf ?? "2026-10-01"}.${
+    viewing = `The user is viewing account ${account.account_id} (${account.nama}) as of ${ctx.asOf ?? "2026-10-01"}.${
       selected ? ` They selected ${selected.id} (${selected.label}) in the evidence graph.` : ""
-    } Resolve "this account", "dia", "di sini" and similar references with it.`;
+    }`;
+    system += `\n\n${viewing} Resolve "this account", "dia", "di sini" and similar references with it.`;
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-  const contents: Content[] = body.data.messages.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
+  const messages: Message[] = [{ role: "system", content: system }, ...body.data.messages];
   const queries: { cypher: string; rows: number; error?: string }[] = [];
   const results: (NeoRecord[] | null)[] = []; // by query number, null when the query failed
+  const seen: string[] = []; // the rows the model was shown, for the Jev check
   const visuals: Visual[] = [];
   const started = Date.now();
 
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
-      const res = await withRetry(() =>
-        ai.models.generateContent({
-          model: MODEL,
-          contents,
-          config: {
-            systemInstruction: system,
-            maxOutputTokens: 4000,
-            tools: [{ functionDeclarations: [CYPHER_TOOL, SHOW_TOOL] }],
-          },
-        }),
-      );
-
-      const reply = res.candidates?.[0]?.content;
-      const calls = res.functionCalls ?? [];
+      const reply = await withRetry(() => complete(messages, step === MAX_STEPS - 1));
+      const calls = reply.tool_calls ?? [];
       if (!calls.length) {
-        const answer = res.text?.trim();
+        const answer = reply.content?.trim();
         if (!answer)
           return Response.json(
             { error: "The model returned no answer. Try rephrasing." },
             { status: 422 },
           );
+        // Jev reads the answer against the rows the model saw (FR-11). It never blocks the answer.
+        const check = checkEnabled()
+          ? await checkAnswer({ question: body.data.messages.at(-1)!.content, answer, context: viewing, results: seen })
+          : undefined;
         return Response.json({
           answer,
           queries,
           seconds: Math.round((Date.now() - started) / 1000),
           visuals,
           cites: citesIn(answer),
+          ...(check && { check }),
         });
       }
 
-      // Echo the model turn back as is: it carries thought signatures Gemini needs on the next call.
-      if (reply) contents.push(reply);
-      const parts: Part[] = [];
+      // Echo the model turn back as is, reasoning_content included.
+      messages.push(reply);
       for (const call of calls) {
         let response: Record<string, unknown>;
-        if (call.name === "show") {
-          const spec = Show.safeParse(call.args);
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          // left empty: the tool below answers with an error the model can correct
+        }
+        if (call.function.name === "show") {
+          const spec = Show.safeParse(args);
           const records = spec.success ? results[spec.data.query] : null;
           const built = !spec.success
             ? "invalid arguments"
@@ -265,7 +305,7 @@ export async function POST(req: Request) {
             response = { output: "Shown to the user." };
           }
         } else {
-          const cypher = String(call.args?.query ?? "");
+          const cypher = String(args.query ?? "");
           const query = results.length;
           try {
             const { rows, total, records } = await runCypher(cypher);
@@ -275,6 +315,7 @@ export async function POST(req: Request) {
               query,
               output: JSON.stringify(rows).slice(0, MAX_RESULT_CHARS),
             };
+            seen.push(`query ${query}: ${response.output}`);
           } catch (e) {
             const error = e instanceof Error ? e.message : "Query failed";
             queries.push({ cypher, rows: 0, error });
@@ -282,45 +323,46 @@ export async function POST(req: Request) {
             response = { query, error };
           }
         }
-        parts.push({
-          functionResponse: { id: call.id, name: call.name, response },
-        });
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(response) });
       }
-      contents.push({ role: "user", parts });
     }
+    // Out of rounds: log what was tried, so a model that keeps failing is visible in the server log.
+    console.warn("chat: out of rounds", JSON.stringify({ model: MODEL, queries }));
     return Response.json(
-      { error: "The question needed too many queries. Try a narrower one." },
+      { error: "The question needed too many queries. Try a narrower one.", queries },
       { status: 422 },
     );
   } catch (e) {
-    // Duck-typed: Next can bundle the SDK twice, which breaks `instanceof ApiError`.
-    const status = (e as { status?: number }).status;
-    if (status === 429) {
-      const wait = /retry in ([\d.]+)s/i.exec(
-        String((e as Error).message),
-      )?.[1];
-      const hint = wait
-        ? ` Try again in about ${Math.ceil(Number(wait))} seconds.`
-        : "";
+    const status = e instanceof ApiError ? e.status : undefined;
+    if (status === 402)
       return Response.json(
-        {
-          error: `Gemini quota reached (free keys allow 5 requests a minute per model).${hint}`,
-        },
-        { status: 429 },
-      );
-    }
-    if (status === 503)
-      return Response.json(
-        { error: "Gemini is overloaded right now. Try again in a minute." },
+        { error: "The DeepSeek balance is used up. Top it up at platform.deepseek.com, then ask again." },
         { status: 503 },
       );
-    if (status === 400 || status === 401 || status === 403)
+    if (status === 429)
+      return Response.json(
+        { error: "DeepSeek is rate limiting this key. Wait a moment and try again." },
+        { status: 429 },
+      );
+    if (status === 500 || status === 503)
+      return Response.json(
+        { error: "DeepSeek is overloaded right now. Try again in a minute." },
+        { status: 503 },
+      );
+    if (status === 400 || status === 401 || status === 403 || status === 422) {
+      console.error("deepseek", status, (e as Error).message);
       return Response.json(
         {
           error:
-            "Gemini rejected the request. Check GEMINI_API_KEY and GEMINI_MODEL.",
+            "DeepSeek rejected the request. Check DEEPSEEK_API_KEY and DEEPSEEK_MODEL.",
         },
         { status: 503 },
+      );
+    }
+    if (e instanceof Error && e.name === "TimeoutError")
+      return Response.json(
+        { error: "DeepSeek took too long to answer. Try a narrower question." },
+        { status: 504 },
       );
     console.error(e);
     return Response.json(
