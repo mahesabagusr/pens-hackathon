@@ -465,11 +465,10 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
 
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-panel">
-      <div role="toolbar" aria-label="Kontrol graph" className="flex flex-wrap items-center gap-1.5 border-b border-line p-2">
-        <button type="button" aria-pressed={mainOnly} disabled={!focusEvidence.length} onClick={() => setMainOnly(!mainOnly)} className={chip(mainOnly)}>
-          Jalur utama saja
-        </button>
-        <span className="mx-1 h-5 w-px bg-line" aria-hidden />
+      <div role="toolbar" aria-label="Kontrol graph" className="evidence-toolbar flex flex-wrap items-center border-b border-line">
+        <div className="evidence-toolbar-section">
+          <h3 className="evidence-toolbar-label">Entity</h3>
+          <div className="evidence-toolbar-controls">
         {origins.map((o) => (
           <button key={o} type="button" aria-pressed={!hiddenOrigins.has(o)} onClick={() => setHiddenOrigins(toggle(hiddenOrigins, o))} className={chip(!hiddenOrigins.has(o))}>
             <svg width="18" height="6" aria-hidden>
@@ -484,12 +483,22 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
             {KIND[k]}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-1.5">
+            <div className="evidence-reset-group">
+              <button type="button" onClick={reset} className={chip(false)}>
+                <Icon name="reset" className="size-3.5" /> Atur ulang
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="evidence-toolbar-section">
+          <h3 className="evidence-toolbar-label">Tampilan</h3>
+          <div className="evidence-toolbar-actions">
+
           <div role="group" aria-label="Tampilan" className="flex">
-            <button type="button" aria-pressed={view === "graph"} onClick={() => setView("graph")} className={`${chip(view === "graph")} rounded-r-none`}>
+            <button type="button" aria-pressed={view === "graph"} onClick={() => setView("graph")} className={chip(view === "graph")}>
               <Icon name="graph" className="size-3.5" /> Graph
             </button>
-            <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")} className={`${chip(view === "list")} -ml-px rounded-l-none`}>
+            <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")} className={chip(view === "list")}>
               <Icon name="list" className="size-3.5" /> Daftar
             </button>
           </div>
@@ -498,9 +507,13 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
               <Icon name="trash" className="size-3.5" /> Hapus eksplorasi ({exploredCount})
             </button>
           )}
-          <button type="button" onClick={reset} className={chip(false)}>
-            <Icon name="reset" className="size-3.5" /> Atur ulang
-          </button>
+            <label className="evidence-main-toggle">
+              <input type="checkbox" role="switch" checked={mainOnly} disabled={!focusEvidence.length} onChange={() => setMainOnly(!mainOnly)} />
+              <span className="evidence-toggle-track" aria-hidden="true"><span /></span>
+              <span>Jalur utama saja</span>
+            </label>
+
+          </div>
         </div>
       </div>
 
@@ -569,9 +582,9 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
                   <button
                     type="button"
                     onClick={() => chat.ask(`Jelaskan ${one.type} ${one.label} (${one.id}) dan hubungannya dengan ${account ?? "akun ini"}.`)}
-                    className="mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-accent hover:underline pointer-coarse:min-h-11"
+                    className="evidence-ask-button mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 px-2.5 text-xs pointer-coarse:min-h-11"
                   >
-                    <Icon name="chat" className="size-3.5" /> Tanya chat tentang ini
+                    <Icon name="chat" className="size-3.5" /> Tanya AI
                   </button>
                 )}
               </div>
@@ -609,23 +622,25 @@ function Graph({ nodes: baseNodes, edges: baseEdges, evidence, focusEvidence, fo
                 {[...evidence]
                   .sort((a, b) => Number(active.has(b.id)) - Number(active.has(a.id)))
                   .map((e) => (
-                    <li key={e.id} className={`rounded-md border p-2.5 text-sm ${active.has(e.id) ? "border-accent/70" : "border-line opacity-60"}`}>
-                      <p className="font-medium">{e.label}</p>
-                      <p className="mt-0.5 break-all font-mono text-[11px] text-muted">
-                        {e.file}:{e.row} · {e.column}
-                        {e.date ? ` · ${e.date}` : ""}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-muted">{ORIGIN[e.origin]}</p>
-                      {e.excerpt && <blockquote className="mt-1.5 line-clamp-4 border-l border-line pl-2 text-xs text-muted">{e.excerpt}</blockquote>}
+                    <li key={e.id} className={`evidence-source-card rounded-md border p-2.5 text-sm ${active.has(e.id) ? "is-active" : "border-line opacity-60"}`}>
+                      <p className="evidence-source-title">{e.label}</p>
+                      <div className="evidence-source-actions">
+                      <button type="button" className="evidence-source-label mt-1.5" title={`1 sumber: ${e.file}:${e.row} · ${e.column}${e.date ? ` · ${e.date}` : ""}`} aria-label="1 source">
+                        Source <span>1</span><Icon name="chevron-right" className="size-3.5" />
+                      </button>
                       {active.has(e.id) && chat && (
                         <button
                           type="button"
                           onClick={() => chat.ask(`Jelaskan bukti "${e.label}" (${e.file} baris ${e.row}) untuk ${account ?? "akun ini"}: apa isinya dan apa artinya bagi keputusan pembelian?`)}
-                          className="mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 text-xs text-accent hover:underline pointer-coarse:min-h-11"
+                          className="evidence-ask-button mt-2 inline-flex min-h-8 cursor-pointer items-center gap-1.5 px-2.5 text-xs pointer-coarse:min-h-11"
                         >
-                          <Icon name="chat" className="size-3.5" /> Tanya chat tentang ini
+                          <Icon name="chat" className="size-3.5" /> Tanya AI
                         </button>
                       )}
+                      </div>
+                      <p className="evidence-source-origin">{ORIGIN[e.origin]}</p>
+                      {e.excerpt && <blockquote className="evidence-source-excerpt line-clamp-4 text-xs text-muted">{e.excerpt}</blockquote>}
+
                     </li>
                   ))}
               </ol>
