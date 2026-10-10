@@ -4,7 +4,7 @@ import { animate, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const HEADER = 80; // sticky header plus breathing room, same as scroll-padding-top in globals.css
+const HEADER = 108; // floating site header plus space above an anchored section
 
 let running: ReturnType<typeof animate> | undefined;
 
