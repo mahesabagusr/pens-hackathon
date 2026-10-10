@@ -7,19 +7,21 @@ import { useEffect, useState } from "react";
 import { logout } from "~/server/actions/auth";
 import { ScrollLink } from "./motion";
 import { Logo } from "./logo";
+import styles from "./marketing-shell.module.css";
 
 const SECTIONS: [string, string][] = [
-  ["problem", "Problem"],
-  ["entry", "Entry"],
-  ["trace", "Trace"],
+  ["problem", "Why Decidely"],
+  ["entry", "Product"],
+  ["trace", "How it works"],
+  ["faq", "FAQ"],
 ];
 
 type NavUser = { name: string | null; email: string };
 
 const ghost =
-  "flex min-h-10 items-center justify-center rounded-md border border-line px-4 text-sm font-medium transition-colors duration-150 hover:border-ink";
+  "flex min-h-10 items-center justify-center rounded-full border border-line px-4 text-sm font-medium transition-colors duration-150 hover:border-ink";
 const solid =
-  "flex min-h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-medium text-background transition-opacity duration-150 hover:opacity-90";
+  "flex min-h-10 items-center justify-center rounded-full bg-ink px-5 text-sm font-medium text-background transition-opacity duration-150 hover:opacity-90";
 const plain = "flex min-h-10 items-center px-3 text-sm text-muted transition-colors duration-150 hover:text-ink";
 
 function AuthLinks({ user, onNavigate, stacked }: { user?: NavUser | null; onNavigate?: () => void; stacked?: boolean }) {
@@ -92,8 +94,8 @@ export function Nav({ user }: { user?: NavUser | null }) {
   const spring = reduced ? { duration: 0 } : ({ type: "spring", stiffness: 500, damping: 40 } as const);
 
   return (
-    <header className="sticky top-0 z-10 border-b border-line bg-background">
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto] items-center gap-4 px-4 py-2 md:grid-cols-[1fr_auto_1fr]">
+    <header className={styles.header}>
+      <div className={styles.headerInner}>
         <ScrollLink href="/#top" className="flex min-h-11 items-center justify-self-start">
           <Logo size="lg" priority />
         </ScrollLink>
@@ -140,7 +142,7 @@ export function Nav({ user }: { user?: NavUser | null }) {
         {open && (
           <motion.div
             id="mobile-menu"
-            className="absolute inset-x-0 top-full border-b border-line bg-background md:hidden"
+            className={`${styles.mobileMenu} absolute inset-x-0 top-full md:hidden`}
             initial={reduced ? false : { opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
@@ -169,7 +171,7 @@ export function Nav({ user }: { user?: NavUser | null }) {
 
       <motion.div
         aria-hidden
-        className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-accent"
+        className={`${styles.progress} absolute inset-x-0 bottom-0 h-px origin-left bg-accent`}
         style={{ scaleX: reduced ? scrollYProgress : scaleX }}
       />
     </header>
